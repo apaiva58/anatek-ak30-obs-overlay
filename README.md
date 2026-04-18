@@ -163,7 +163,7 @@ MIT License — free to use, modify and distribute.
 
 Almere Pioneers Basketball  
 Almere, Netherlands  
-https://almerepioneersbball.nl
+https://almerepioneers.nl
 
 ## Acknowledgements
 
