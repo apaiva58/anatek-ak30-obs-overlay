@@ -19,4 +19,19 @@ match_state = {
     "away_bonus":     False,
     "last_foul":      None,   # for popup: {player, jersey, code, team}
     "status":         "Planned",
+    "period_name":   "—",
+    "periods":       {},
+    # Anatec serial data
+    "anatec_connected":    False,
+    "anatec_home_score":   0,
+    "anatec_guest_score":  0,
+    "anatec_home_fouls":   0,
+    "anatec_guest_fouls":  0,
+    "anatec_period":       0,
+    "anatec_clock":        "10:00",
+    "anatec_clock_min":    10,
+    "anatec_clock_sec":    0,
+    "anatec_clock_running": False,
+    "anatec_timeout":      None,
+    "anatec_service_dot":  False,
 }
