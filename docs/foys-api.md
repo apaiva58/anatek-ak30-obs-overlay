@@ -181,3 +181,11 @@ Add to .gitignore:
 - "InProgress" status not confirmed in demo — to verify with live match
 - homeScore/awayScore in match object are pre-calculated but the
   match object is not polled live — calculate from /goals instead
+
+  - API requires authentication — 401 returned without Bearer token.
+  Public/read-only access is not available (confirmed April 2026).
+  The Pi must authenticate independently using club DWF credentials.
+  Multiple simultaneous logins with the same credentials appear
+  supported (JWT is stateless) — tablet operator is unaffected.
+- Consider contacting FOYS/NBB for a dedicated read-only API token
+  for club streaming integrations.
