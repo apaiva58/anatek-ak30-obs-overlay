@@ -173,3 +173,63 @@ anything extra is connected.
 
 - FTDI FT232RL adapter:
   https://www.reichelt.de (search: FTDI FT232)
+
+---
+
+## Target Platform — Raspberry Pi
+
+The initial prototype uses a MacBook for development and protocol discovery.
+The production target is a Raspberry Pi, installed permanently at the 
+scorers table.
+
+### Why Raspberry Pi
+
+- Dedicated hardware — always ready, no laptop dependency
+- Stays at the hall, zero setup per game
+- Built-in ethernet port for stable network connection
+- Runs Python natively — same code as development
+- Low cost (Pi 4 or Pi 5, €50-80)
+
+### Connectivity options
+
+    Option 1 — Ethernet cable (preferred)
+    Pi → cable → hall network router
+
+    Option 2 — Hall WiFi
+    Pi → WiFi → router
+
+    Option 3 — Mobile hotspot (no tech guy scenario)
+    Pi → WiFi → volunteer's phone hotspot → internet
+
+### Boot behaviour
+
+Target: all services start automatically on boot.
+Volunteer plugs in the Pi, presses nothing, everything runs.
+
+---
+
+---
+
+## Camera Integration
+
+Almere Pioneers is evaluating camera options for game recording 
+and live streaming. Some standalone AI sports cameras — such as 
+the XbotGo Falcon — include a built-in scoreboard overlay feature, 
+but require manual score input via a companion app.
+
+### Goal
+
+If a camera with scoreboard overlay is adopted, the aim is to 
+replace manual score input with automatic data from the Anatec AK30,
+driven by the Raspberry Pi.
+
+### Approach
+
+Depends on the camera chosen:
+1. **API or webhook** — contact the manufacturer
+2. **Traffic analysis** — intercept WiFi communication between 
+   app and camera to identify how scoreboard updates are sent
+
+### Status
+
+Pending camera selection.
