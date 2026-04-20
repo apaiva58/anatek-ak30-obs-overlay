@@ -11,11 +11,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL  = "https://api.foys.io/competition/dmf-api/v1"
-AUTH_URL  = "https://api.foys.io/foys/api/v1/token"
+BASE_URL = "https://api.foys.io/competition/dmf-api/v1"
+AUTH_URL = "https://api.foys.io/foys/api/v1/token"
 
 HEADERS = {
-    "demo-mode":  "true",   # remove for production
+    "demo-mode":  "true",
     "Origin":     "https://dwf.basketball.nl",
     "Referer":    "https://dwf.basketball.nl/",
     "Accept":     "application/json",
@@ -55,7 +55,13 @@ class FoysClient:
         return self._get(f"/matches/{match_id}/goals")
 
     def get_offenses(self, match_id):
-        return self._get(f"/matches/{match_id}/offenses")
+        result = self._get(f"/matches/{match_id}/offenses")
+        if isinstance(result, dict) and "items" in result:
+            return result["items"]
+        return result
 
     def get_timeouts(self, match_id):
-        return self._get(f"/matches/{match_id}/timeouts")
+        result = self._get(f"/matches/{match_id}/timeouts")
+        if isinstance(result, dict) and "items" in result:
+            return result["items"]
+        return result
