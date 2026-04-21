@@ -9,6 +9,7 @@ Demo match: https://dwf.basketball.nl/matches/487998/progress
 
 ## Authentication
 
+```
 POST https://api.foys.io/foys/api/v1/token
 Content-Type: application/x-www-form-urlencoded
 
@@ -16,102 +17,141 @@ grant_type=password
 username=...
 password=...
 organisationId=...
+```
 
-Returns a JWT token. Use as Bearer token on all subsequent requests.
-Token expires — must be refreshed periodically.
+Returns a JWT token. Use as Bearer header on all subsequent requests.
+Token expires and must be refreshed periodically. On 401 response,
+re-authenticate and retry.
 
-NEVER commit credentials to the repository. Store in .env file.
-Add .env to .gitignore.
+JWT is stateless — multiple simultaneous clients using the same
+credentials are supported. The DWF tablet operator is unaffected
+by additional read-only clients.
+
+API requires authentication. Public access not available.
+401 returned without a valid Bearer token (confirmed April 2026).
+
+NEVER commit credentials to the repository. Store in a .env file.
 
 ---
 
 ## Base URL
 
+```
 https://api.foys.io/competition/dmf-api/v1
+```
+
+All endpoints below are relative to this base URL.
 
 ---
 
 ## Endpoints
 
 ### All matches for account
+
+```
 GET /matches
+```
 
 Returns an array of all matches assigned to the authenticated DWF
-account — completed, live, and upcoming. The Pi uses this to find
-the currently live match without needing a hardcoded matchId.
-
-  live = next(m for m in matches if m["status"] == "InProgress")
+account — completed, live and upcoming.
 
 Match status values:
-  "Planned"    — not yet started
-  "InProgress" — live (assumed, not yet confirmed in demo)
-  "Final"      — completed
+
+  Planned      not yet started
+  InProgress   live (not confirmed in demo environment)
+  Final        completed
 
 Key fields per match object:
-  id                        — matchId for subsequent calls
+
+  id                              matchId for subsequent calls
   status
   homeTeamId / awayTeamId
   homeTeamName / awayTeamName
-  homeTeamOrganisationUrl / awayTeamOrganisationUrl  (team logo)
-  homeScore / awayScore     — pre-calculated running totals
-  period                    — current period (null when not started)
-  matchDisciplinaryStatus   — null or reason object if match stopped
+  homeTeamOrganisationName        club name
+  homeTeamOrganisationUrl         club logo URL
+  homeScore / awayScore           pre-calculated running totals
+  period                          current period ID (null when not started)
+  matchDisciplinaryStatus         null or reason if match stopped
   homeTeamMatchPlayers / awayTeamMatchPlayers
-    teamNumber              — jersey number
+    teamNumber                    jersey number
     isCaptain
     isSubstitute / isSubstitutePlayed
-    matchRole.type          — "Player" or "Coach"
-    totalPoints             — running scorer total
-    presentStatus           — "Present" | "NotChecked"
+    matchRole.type                Player or Coach
+    totalPoints                   running scorer total
+    presentStatus                 Present or NotChecked
 
-### Goals (polled every 3 seconds during live match)
+Note: homeScore and awayScore in the match object are pre-calculated
+but the match object is not polled live by the DWF app. During live
+play, score must be calculated from the /goals endpoint.
+
+---
+
+### Goals
+
+```
 GET /matches/{matchId}/goals
+```
 
-Returns all scoring events. Score must be calculated client-side
-by summing points per team — this endpoint is polled live, not
-the match object.
+Returns an array of all scoring events for the match.
 
 Key fields:
-  teamId
-  points   — 0, 1, 2, or 3
-  penalty  — true = free throw, false = field goal
-  periodId
+
+  teamId          which team scored
+  points          0, 1, 2 or 3
+  penalty         true = free throw, false = field goal
+  periodId        period in which the score occurred
+  matchPlayerId   player who scored
+  matchLogId      chronological sequence number
 
 Scoring reference:
-  points=2, penalty=false  →  2-point field goal
-  points=3, penalty=false  →  3-point field goal
-  points=1, penalty=true   →  free throw made
-  points=0, penalty=true   →  free throw missed (no score change)
+
+  points=2, penalty=false   2-point field goal
+  points=3, penalty=false   3-point field goal
+  points=1, penalty=true    free throw made
+  points=0, penalty=true    free throw missed (no score change)
 
 Score calculation:
+
   home_score = sum(g["points"] for g in goals if g["teamId"] == home_id)
   away_score = sum(g["points"] for g in goals if g["teamId"] == away_id)
 
-### Offenses (polled every 3 seconds during live match)
-GET /matches/{matchId}/offenses
+---
 
-Returns all fouls. Used to calculate team fouls per period for
-bonus situation detection.
+### Offenses
+
+```
+GET /matches/{matchId}/offenses
+```
+
+Returns a paginated object:
+
+  {"totalCount": N, "items": [...]}
+
+Extract the items array. Returns all fouls registered in the match.
 
 Key fields:
+
   matchPlayer.teamId
-  matchPlayer.matchRole.type  — "Player" or "Coach"
+  matchPlayer.matchRole.type    Player or Coach
   offenseType.code
   offenseType.group
   periodId
+  matchPlayerId
+  matchLogId
 
 Offense type reference:
-  code  group  name                            counts as team foul
-  P0    P      Diskwalificerende persoonlijke  yes
-  P1    P      Persoonlijke fout 1             yes
-  P2    P      Persoonlijke fout 2             yes
-  P3    P      Persoonlijke fout 3             yes
-  T     TF     Technische fout speler          yes
-  TC    TF     Technische fout coach           NO
-  TB    TF     Technische fout bank            NO
-  U     SF     Onsportief gedrag               yes
-  D     SF     Diskwalificatie                 yes
-  F     SF     Vechten                         yes
+
+  code  group  name                              counts as team foul
+  P0    P      Diskwalificerende persoonlijke    yes
+  P1    P      Persoonlijke fout 1               yes
+  P2    P      Persoonlijke fout 2               yes
+  P3    P      Persoonlijke fout 3               yes
+  T     TF     Technische fout speler            yes
+  TC    TF     Technische fout coach             NO
+  TB    TF     Technische fout bank              NO
+  U     SF     Onsportief gedrag                 yes
+  D     SF     Diskwalificatie                   yes
+  F     SF     Vechten                           yes
 
 Team foul count — only fouls where matchRole.type == "Player" count.
 Coach (TC) and bench (TB) technicals are excluded.
@@ -124,68 +164,103 @@ Coach (TC) and bench (TB) technicals are excluded.
   ]
   bonus = len(team_fouls) >= 4
 
-### Timeouts (polled if needed)
+---
+
+### Timeouts
+
+```
 GET /matches/{matchId}/timeouts
+```
+
+Returns a paginated object:
+
+  {"totalCount": N, "items": [...]}
+
+Extract the items array. Returns all timeouts taken in the match.
 
 Key fields:
-  isHomeTeam  — true or false
+
+  isHomeTeam    true or false
   periodId
+
+Note: the API records that a timeout occurred but does not indicate
+whether the timeout is currently active. Duration tracking must be
+handled client-side.
 
 ---
 
-## Pi polling architecture
+### Logs
 
-On startup:
-  GET /matches
-    → find live match by status "InProgress"
-    → extract team names, IDs, matchId
+```
+GET /matches/{matchId}/logs
+```
 
-Every 3 seconds during game:
-  GET /matches/{matchId}/goals     → calculate score per team
-  GET /matches/{matchId}/offenses  → calculate team fouls per period
+Returns a chronological event log. Each entry has a sparse structure
+where most fields are null — only fields relevant to the event type
+are populated.
+
+Useful fields:
+
+  details         human-readable description (e.g. "Gewisseld naar 2e kwart")
+  periodPosition  new period ID on period change events
+  matchLogId      chronological sequence number
+
+Note: the DWF browser app polls this endpoint only occasionally,
+not continuously. Not suitable for high-frequency polling.
+
+---
+
+## Period IDs
+
+FOYS uses numeric period IDs consistent across all matches:
+
+  14   1e kwart
+  15   2e kwart
+  16   3e kwart
+  17   4e kwart
+  18   1e verlenging
+  19   2e verlenging
+  20   3e verlenging
+  21   4e verlenging
+  22   5e verlenging
+
+Team fouls reset between quarters (resetTeamOffenses: true).
+Overtime periods do not reset team fouls (resetTeamOffenses: false).
 
 ---
 
 ## Clock
 
 The game clock is not transmitted via the FOYS API. It runs
-client-side in the DWF browser app. No WebSocket connection detected.
+client-side in the DWF browser app from a start timestamp.
+No WebSocket connection detected.
 
-For the overlay, clock data must come from the Anatec AK30 serial
-feed (see protocol.md), or be omitted from the overlay.
+For live clock data an alternative source is required, such as
+the Anatec AK30 serial feed (see docs/protocol.md).
 
 ---
 
 ## Security
 
-Credentials (username, password, organisationId) must never be
-committed to the repository.
+Credentials must never be committed to the repository.
 
 Store in a .env file:
+
   FOYS_USERNAME=...
   FOYS_PASSWORD=...
   FOYS_ORGANISATION_ID=...
 
-Add to .gitignore:
-  .env
+Add .env to .gitignore.
 
 ---
 
-## Notes
+## Technical notes
 
 - All API calls go to api.foys.io, not dwf.basketball.nl
 - CORS restricted to dwf.basketball.nl origin
 - Served via Cloudflare
-- demo-mode: true header used in demo environment
-- matchId visible in DWF URL: /matches/{matchId}/progress
-- "InProgress" status not confirmed in demo — to verify with live match
-- homeScore/awayScore in match object are pre-calculated but the
-  match object is not polled live — calculate from /goals instead
-
-  - API requires authentication — 401 returned without Bearer token.
-  Public/read-only access is not available (confirmed April 2026).
-  The Pi must authenticate independently using club DWF credentials.
-  Multiple simultaneous logins with the same credentials appear
-  supported (JWT is stateless) — tablet operator is unaffected.
+- Use demo-mode: true header in the demo environment only
+- matchId is visible in the DWF URL: /matches/{matchId}/progress
+- InProgress status not confirmed in demo — verify with a live match
 - Consider contacting FOYS/NBB for a dedicated read-only API token
-  for club streaming integrations.
+  for club streaming and broadcast integrations
