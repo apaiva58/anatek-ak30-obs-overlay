@@ -45,6 +45,13 @@
             letter-spacing: 0.05em;
         }
 
+        .team-club {
+            font-size: 0.65rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
         .team-fouls {
             font-size: 0.8rem;
             color: #aaaaaa;
@@ -175,7 +182,10 @@
 
     <!-- Home team -->
     <div class="team home">
-        <div class="team-name" id="home-name">—</div>
+        <div>
+            <div class="team-club" id="home-club"></div>
+            <div class="team-name" id="home-name">—</div>
+        </div>
         <div class="team-fouls" id="home-fouls">fouten: 0</div>
     </div>
 
@@ -195,7 +205,10 @@
 
     <!-- Away team -->
     <div class="team away">
-        <div class="team-name" id="away-name">—</div>
+        <div>
+            <div class="team-club" id="away-club"></div>
+            <div class="team-name" id="away-name">—</div>
+        </div>
         <div class="team-fouls" id="away-fouls">fouten: 0</div>
     </div>
 </div>
@@ -209,6 +222,7 @@
     let timeoutTimer = null;
     let lastHomeTimeouts = 0;
     let lastAwayTimeouts = 0;
+    let currentState = {};
 
     function periodLabel(id) {
         const map = { 14: "1", 15: "2", 16: "3", 17: "4" };
@@ -225,7 +239,10 @@
 
     function startTimeoutFlash(team) {
         const toPopup = document.getElementById("timeout-popup");
-        toPopup.textContent = team === "home" ? "TIME OUT — THUIS" : "TIME OUT — GASTEN";
+        const name = team === "home"
+            ? (currentState.home_club || currentState.home_name || "THUIS")
+            : (currentState.away_club || currentState.away_name || "GASTEN");
+        toPopup.textContent = `TIME OUT — ${name.toUpperCase()}`;
         toPopup.classList.add("visible");
         clearTimeout(timeoutTimer);
         timeoutTimer = setTimeout(() => {
@@ -237,6 +254,7 @@
         try {
             const res = await fetch("/api/state");
             const s = await res.json();
+            currentState = s;
 
             document.getElementById("home-name").textContent  = s.home_name || "—";
             document.getElementById("away-name").textContent  = s.away_name || "—";
@@ -244,6 +262,8 @@
             document.getElementById("away-score").textContent = s.away_score ?? 0;
             document.getElementById("period").textContent     = s.status === "Final" ? "FINAL" : periodLabel(s.period);
             document.getElementById("clock").textContent      = s.anatec_clock ?? "—";
+            document.getElementById("home-club").textContent  = s.home_club || "";
+            document.getElementById("away-club").textContent  = s.away_club || "";
 
             const hf = document.getElementById("home-fouls");
             hf.textContent = `fouten: ${s.home_fouls}`;

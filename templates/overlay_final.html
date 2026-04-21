@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: transparent;
+            font-family: -apple-system, 'Helvetica Neue', sans-serif;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+        }
+
+        #overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(16, 24, 48, 0.95);
+            padding: 20px 40px 24px;
+            display: none;
+        }
+
+        #overlay.visible {
+            display: block;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #333;
+        }
+
+        .match-result {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .result-team {
+            text-align: center;
+        }
+
+        .result-club {
+            font-size: 0.65rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+
+        .result-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
+
+        .result-score {
+            font-size: 2.8rem;
+            font-weight: 800;
+            color: #ff6b00;
+            padding: 0 16px;
+        }
+
+        .result-label {
+            font-size: 0.7rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+        }
+
+        /* Tables */
+        .tables {
+            display: flex;
+            gap: 32px;
+        }
+
+        .team-table {
+            flex: 1;
+        }
+
+        .team-header {
+            font-size: 0.7rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #222;
+        }
+
+        .team-header span {
+            color: #ff6b00;
+            font-weight: 700;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+        }
+
+        thead th {
+            color: #666;
+            font-weight: 500;
+            text-align: left;
+            padding: 3px 6px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        thead th.num {
+            text-align: right;
+        }
+
+        tbody tr {
+            border-top: 1px solid #1a1a2e;
+        }
+
+        tbody tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+
+        td {
+            padding: 4px 6px;
+            color: #cccccc;
+        }
+
+        td.jersey {
+            color: #888;
+            width: 32px;
+            font-size: 0.75rem;
+        }
+
+        td.name {
+            color: #ffffff;
+            font-weight: 500;
+        }
+
+        td.name.captain::after {
+            content: " ©";
+            color: #ff6b00;
+            font-size: 0.7rem;
+        }
+
+        td.num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+            width: 40px;
+        }
+
+        td.points {
+            color: #ffffff;
+            font-weight: 700;
+        }
+
+        td.threes {
+            color: #aaaaaa;
+        }
+
+        td.fouls {
+            color: #aaaaaa;
+        }
+
+        td.fouls.warning {
+            color: #ff6b00;
+            font-weight: 600;
+        }
+
+        .pioneer-accent {
+            width: 4px;
+            height: 40px;
+            background: #ff6b00;
+            border-radius: 2px;
+            margin-right: 16px;
+            flex-shrink: 0;
+        }
+
+        .final-badge {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: #ff6b00;
+            border: 1px solid #ff6b00;
+            padding: 3px 10px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+<div id="overlay">
+    <div class="header">
+        <div style="display:flex; align-items:center;">
+            <div class="pioneer-accent"></div>
+            <div class="match-result">
+                <div class="result-team">
+                    <div class="result-club" id="home-club"></div>
+                    <div class="result-name" id="home-name">—</div>
+                </div>
+                <div>
+                    <div class="result-label">eindstand</div>
+                    <div class="result-score">
+                        <span id="home-score">0</span>
+                        <span style="color:#444; font-weight:300"> — </span>
+                        <span id="away-score">0</span>
+                    </div>
+                </div>
+                <div class="result-team">
+                    <div class="result-club" id="away-club"></div>
+                    <div class="result-name" id="away-name">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="final-badge">Final</div>
+    </div>
+
+    <div class="tables">
+        <div class="team-table">
+            <div class="team-header">
+                Thuis — <span id="home-table-name"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Speler</th>
+                        <th class="num">Pts</th>
+                        <th class="num">3pt</th>
+                        <th class="num">Ftn</th>
+                    </tr>
+                </thead>
+                <tbody id="home-tbody"></tbody>
+            </table>
+        </div>
+
+        <div class="team-table">
+            <div class="team-header">
+                Gasten — <span id="away-table-name"></span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Speler</th>
+                        <th class="num">Pts</th>
+                        <th class="num">3pt</th>
+                        <th class="num">Ftn</th>
+                    </tr>
+                </thead>
+                <tbody id="away-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    function buildRows(players, tbodyId) {
+        const tbody = document.getElementById(tbodyId);
+        tbody.innerHTML = "";
+
+        // sort by points descending
+        players.sort((a, b) => b.points - a.points);
+
+        players.forEach(p => {
+            if (p.points === 0 && p.fouls === 0) return; // skip inactive
+
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="jersey">${p.jersey ?? "—"}</td>
+                <td class="name${p.captain ? " captain" : ""}">${p.name}</td>
+                <td class="num points">${p.points}</td>
+                <td class="num threes">${p.threes > 0 ? p.threes : "—"}</td>
+                <td class="num fouls${p.fouls >= 4 ? " warning" : ""}">${p.fouls > 0 ? p.fouls : "—"}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function update() {
+        try {
+            const [stateRes, playersRes] = await Promise.all([
+                fetch("/api/state"),
+                fetch("/api/players")
+            ]);
+            const s = await stateRes.json();
+            const players = await playersRes.json();
+
+            const overlay = document.getElementById("overlay");
+
+            if (s.status === "Final") {
+                overlay.classList.add("visible");
+
+                document.getElementById("home-name").textContent  = s.home_name || "—";
+                document.getElementById("away-name").textContent  = s.away_name || "—";
+                document.getElementById("home-club").textContent  = s.home_club || "";
+                document.getElementById("away-club").textContent  = s.away_club || "";
+                document.getElementById("home-score").textContent = s.home_score ?? 0;
+                document.getElementById("away-score").textContent = s.away_score ?? 0;
+                document.getElementById("home-table-name").textContent = s.home_name || "";
+                document.getElementById("away-table-name").textContent = s.away_name || "";
+
+                const homePlayers = players.filter(p => p.team === "home");
+                const awayPlayers = players.filter(p => p.team === "away");
+
+                buildRows(homePlayers, "home-tbody");
+                buildRows(awayPlayers, "away-tbody");
+
+            } else {
+                overlay.classList.remove("visible");
+            }
+
+        } catch (e) {
+            console.error("State fetch error:", e);
+        }
+    }
+
+    update();
+    setInterval(update, 3000);
+</script>
+
+</body>
+</html>

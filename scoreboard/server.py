@@ -50,63 +50,78 @@ def poll():
     tick = 0
     while True:
         try:
-            if match_state["selected"] and match_state["status"] != "Final":
+            if match_state["selected"]:
                 match_id = match_state["match_id"]
                 home_id  = match_state["home_id"]
                 away_id  = match_state["away_id"]
 
-                goals    = client.get_goals(match_id)
-                offenses = client.get_offenses(match_id)
-                timeouts = client.get_timeouts(match_id)
-                period   = current_period(goals, offenses)
-
-                # every ~9 seconds — check match status and current period
+                # always check status every ~9 seconds
                 if tick % 3 == 0:
                     try:
                         matches = client.get_matches()
                         current = next((m for m in matches if m["id"] == match_id), None)
                         if current:
                             match_state["status"] = current["status"]
-                            if current.get("period"):
-                                period = current["period"]
                     except Exception:
                         pass
 
-                match_state["home_score"] = calculate_score(goals, home_id)
-                match_state["away_score"] = calculate_score(goals, away_id)
-                match_state["period"]     = period
+                # only when not Final
+                if match_state["status"] != "Final":
+                    goals    = client.get_goals(match_id)
+                    offenses = client.get_offenses(match_id)
+                    timeouts = client.get_timeouts(match_id)
+                    period   = current_period(goals, offenses)
 
-                if period:
-                    home_fouls = calculate_fouls(offenses, home_id, period)
-                    away_fouls = calculate_fouls(offenses, away_id, period)
-                    match_state["home_fouls"] = home_fouls
-                    match_state["away_fouls"] = away_fouls
-                    match_state["home_bonus"] = home_fouls >= 4
-                    match_state["away_bonus"] = away_fouls >= 4
-                    match_state["home_timeouts"] = len([
-                        t for t in timeouts
-                        if t["isHomeTeam"] and t["periodId"] == period
-                    ])
-                    match_state["away_timeouts"] = len([
-                        t for t in timeouts
-                        if not t["isHomeTeam"] and t["periodId"] == period
-                    ])
+                    match_state["home_score"] = calculate_score(goals, home_id)
+                    match_state["away_score"] = calculate_score(goals, away_id)
+                    match_state["period"]     = period
 
-                # detect new player fouls for popup
-                new_fouls = [
-                    f for f in offenses
-                    if f["id"] not in seen_offense_ids
-                    and f["matchPlayer"]["matchRole"]["type"] == "Player"
-                ]
-                if new_fouls:
-                    f = new_fouls[-1]
-                    match_state["last_foul"] = {
-                        "player": f["matchPlayer"]["person"]["fullName"],
-                        "jersey": f["matchPlayer"]["teamNumber"],
-                        "code":   f["offenseType"]["code"],
-                        "team":   "home" if f["matchPlayer"]["teamId"] == home_id else "away",
-                    }
-                seen_offense_ids = {f["id"] for f in offenses}
+                    if period:
+                        home_fouls = calculate_fouls(offenses, home_id, period)
+                        away_fouls = calculate_fouls(offenses, away_id, period)
+                        match_state["home_fouls"] = home_fouls
+                        match_state["away_fouls"] = away_fouls
+                        match_state["home_bonus"] = home_fouls >= 4
+                        match_state["away_bonus"] = away_fouls >= 4
+                        match_state["home_timeouts"] = len([
+                            t for t in timeouts
+                            if t["isHomeTeam"] and t["periodId"] == period
+                        ])
+                        match_state["away_timeouts"] = len([
+                            t for t in timeouts
+                            if not t["isHomeTeam"] and t["periodId"] == period
+                        ])
+
+                    new_fouls = [
+                        f for f in offenses
+                        if f["id"] not in seen_offense_ids
+                        and f["matchPlayer"]["matchRole"]["type"] == "Player"
+                    ]
+                    if new_fouls:
+                        f = new_fouls[-1]
+                        match_state["last_foul"] = {
+                            "player": f["matchPlayer"]["person"]["fullName"],
+                            "jersey": f["matchPlayer"]["teamNumber"],
+                            "code":   f["offenseType"]["code"],
+                            "team":   "home" if f["matchPlayer"]["teamId"] == home_id else "away",
+                        }
+                    seen_offense_ids = {f["id"] for f in offenses}
+
+                    player_stats = {}
+                    for g in goals:
+                        pid = g["matchPlayerId"]
+                        if pid not in player_stats:
+                            player_stats[pid] = {"points": 0, "threes": 0, "fouls": 0}
+                        player_stats[pid]["points"] += g["points"]
+                        if g["points"] == 3:
+                            player_stats[pid]["threes"] += 1
+                    for f in offenses:
+                        if f["matchPlayer"]["matchRole"]["type"] == "Player":
+                            pid = f["matchPlayerId"]
+                            if pid not in player_stats:
+                                player_stats[pid] = {"points": 0, "threes": 0, "fouls": 0}
+                            player_stats[pid]["fouls"] += 1
+                    match_state["player_stats"] = player_stats
 
         except Exception as e:
             print(f"Poll error: {e}")
@@ -143,6 +158,8 @@ def select_match(match_id):
         "home_score": match["homeScore"],
         "away_score": match["awayScore"],
         "status":     match["status"],
+        "home_club":  match["homeTeamOrganisationName"],
+        "away_club":  match["awayTeamOrganisationName"],
         "last_foul":  None,
     })
     return render_template("select.html", matches=matches,
@@ -153,10 +170,47 @@ def select_match(match_id):
 def api_state():
     return jsonify(match_state)
 
+@app.route("/api/players")
+def api_players():
+    """Returns player roster with live stats for both teams."""
+    if not match_state["selected"]:
+        return jsonify([])
+    
+    match_id = match_state["match_id"]
+    try:
+        matches = client.get_matches()
+        match = next((m for m in matches if m["id"] == match_id), None)
+        if not match:
+            return jsonify([])
+        
+        stats = match_state.get("player_stats", {})
+        result = []
+        
+        for team_key in ["homeTeamMatchPlayers", "awayTeamMatchPlayers"]:
+            team = "home" if team_key == "homeTeamMatchPlayers" else "away"
+            for p in match[team_key]:
+                if p["matchRole"]["type"] != "Player":
+                    continue
+                pid = p["id"]
+                s = stats.get(pid, {"points": 0, "threes": 0, "fouls": 0})
+                result.append({
+                    "team":    team,
+                    "jersey":  p["teamNumber"],
+                    "name":    p["person"]["fullName"],
+                    "captain": p["isCaptain"],
+                    "points":  s["points"],
+                    "threes":  s["threes"],
+                    "fouls":   s["fouls"],
+                })
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/overlay")
 def overlay():
-    response = make_response(render_template("overlay_foys.html"))
+    response = make_response(render_template("overlay.html"))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     return response
@@ -171,6 +225,13 @@ def overlay_anatec():
 @app.route("/overlay/foys")
 def overlay_foys():
     response = make_response(render_template("overlay_foys.html"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+@app.route("/overlay/final")
+def overlay_final():
+    response = make_response(render_template("overlay_final.html"))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     return response

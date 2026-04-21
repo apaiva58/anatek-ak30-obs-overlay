@@ -6,6 +6,7 @@ Updated by the background poller, read by Flask routes.
 """
 
 match_state = {
+     # FOYS api data
     "selected":       False,
     "match_id":       None,
     "home_name":      "",
@@ -21,6 +22,11 @@ match_state = {
     "status":         "Planned",
     "period_name":   "—",
     "periods":       {},
+    "home_timeouts": 0,
+    "away_timeouts": 0,
+    "home_club":  "",
+    "away_club":  "",
+    "player_stats": {},
     # Anatec serial data
     "anatec_connected":    False,
     "anatec_home_score":   0,
