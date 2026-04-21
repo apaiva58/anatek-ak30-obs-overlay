@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            font-family: -apple-system, 'Helvetica Neue', sans-serif;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+        }
+
+        #bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 72px;
+            background: rgba(16, 24, 48, 0.92);
+            display: flex;
+            align-items: center;
+            padding: 0 32px;
+            gap: 0;
+        }
+
+        .team {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex: 1;
+        }
+
+        .team-name {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .team-fouls {
+            font-size: 0.8rem;
+            color: #aaaaaa;
+            font-weight: 500;
+        }
+
+        .team-fouls.bonus {
+            color: #ff0000;
+            font-weight: 700;
+        }
+
+        .away {
+            flex-direction: row-reverse;
+            text-align: right;
+        }
+
+        .scoreboard {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 0 24px;
+        }
+
+        .score {
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: #ffffff;
+            width: 72px;
+            text-align: center;
+            line-height: 1;
+        }
+
+        .divider {
+            font-size: 2rem;
+            color: #444;
+            font-weight: 300;
+            padding: 0 4px;
+        }
+
+        .period-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 20px;
+            border-left: 1px solid #333;
+            border-right: 1px solid #333;
+            margin: 0 16px;
+        }
+
+        .period-label {
+            font-size: 0.65rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .period-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #ff6b00;
+        }
+
+        #foul-popup {
+            position: absolute;
+            bottom: 88px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(16, 24, 48, 0.95);
+            border-left: 4px solid #ff6b00;
+            padding: 10px 20px;
+            border-radius: 4px;
+            color: white;
+            font-size: 0.95rem;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        #foul-popup.visible {
+            opacity: 1;
+        }
+
+        #timeout-popup {
+            position: absolute;
+            bottom: 88px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(16, 24, 48, 0.95);
+            border-left: 4px solid #ff0000;
+            padding: 10px 24px;
+            border-radius: 4px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        #timeout-popup.visible {
+            opacity: 1;
+            animation: flash 0.8s infinite;
+        }
+
+        @keyframes flash {
+            0%   { opacity: 1; }
+            50%  { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        .pioneer-accent {
+            width: 4px;
+            height: 40px;
+            background: #ff6b00;
+            border-radius: 2px;
+            margin-right: 16px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="bar">
+    <div class="pioneer-accent"></div>
+
+    <!-- Home team -->
+    <div class="team home">
+        <div class="team-name" id="home-name">—</div>
+        <div class="team-fouls" id="home-fouls">fouten: 0</div>
+    </div>
+
+    <!-- Scoreboard -->
+    <div class="scoreboard">
+        <div class="score" id="home-score">0</div>
+        <div class="divider">—</div>
+        <div class="period-wrap">
+            <div class="period-label">kwart</div>
+            <div class="period-value" id="period">—</div>
+            <div class="period-label" style="margin-top:6px">tijd</div>
+            <div class="period-value" id="clock" style="font-size:1rem">—</div>
+        </div>
+        <div class="divider">—</div>
+        <div class="score" id="away-score">0</div>
+    </div>
+
+    <!-- Away team -->
+    <div class="team away">
+        <div class="team-name" id="away-name">—</div>
+        <div class="team-fouls" id="away-fouls">fouten: 0</div>
+    </div>
+</div>
+
+<div id="timeout-popup"></div>
+<div id="foul-popup"></div>
+
+<script>
+    let lastFoul = null;
+    let popupTimeout = null;
+    let timeoutTimer = null;
+    let lastHomeTimeouts = 0;
+    let lastAwayTimeouts = 0;
+
+    function periodLabel(id) {
+        const map = { 14: "1", 15: "2", 16: "3", 17: "4" };
+        return map[id] || id || "—";
+    }
+
+    function showFoulPopup(foul) {
+        const popup = document.getElementById("foul-popup");
+        popup.textContent = `Fout: ${foul.player} (#${foul.jersey}) — ${foul.code}`;
+        popup.classList.add("visible");
+        clearTimeout(popupTimeout);
+        popupTimeout = setTimeout(() => popup.classList.remove("visible"), 4000);
+    }
+
+    function startTimeoutFlash(team) {
+        const toPopup = document.getElementById("timeout-popup");
+        toPopup.textContent = team === "home" ? "TIME OUT — THUIS" : "TIME OUT — GASTEN";
+        toPopup.classList.add("visible");
+        clearTimeout(timeoutTimer);
+        timeoutTimer = setTimeout(() => {
+            toPopup.classList.remove("visible");
+        }, 60000);
+    }
+
+    async function update() {
+        try {
+            const res = await fetch("/api/state");
+            const s = await res.json();
+
+            document.getElementById("home-name").textContent  = s.home_name || "—";
+            document.getElementById("away-name").textContent  = s.away_name || "—";
+            document.getElementById("home-score").textContent = s.home_score ?? 0;
+            document.getElementById("away-score").textContent = s.away_score ?? 0;
+            document.getElementById("period").textContent     = s.status === "Final" ? "FINAL" : periodLabel(s.period);
+            document.getElementById("clock").textContent      = s.anatec_clock ?? "—";
+
+            const hf = document.getElementById("home-fouls");
+            hf.textContent = `fouten: ${s.home_fouls}`;
+            hf.className = "team-fouls" + (s.home_bonus ? " bonus" : "");
+
+            const af = document.getElementById("away-fouls");
+            af.textContent = `fouten: ${s.away_fouls}`;
+            af.className = "team-fouls" + (s.away_bonus ? " bonus" : "");
+
+            // timeout detection
+            const ht = s.home_timeouts ?? 0;
+            const at = s.away_timeouts ?? 0;
+
+            if (ht > lastHomeTimeouts) {
+                startTimeoutFlash("home");
+            }
+            if (at > lastAwayTimeouts) {
+                startTimeoutFlash("away");
+            }
+            lastHomeTimeouts = ht;
+            lastAwayTimeouts = at;
+
+            // foul popup
+            if (s.last_foul && JSON.stringify(s.last_foul) !== JSON.stringify(lastFoul)) {
+                lastFoul = s.last_foul;
+                showFoulPopup(s.last_foul);
+            }
+
+            // connection indicator
+            const bar = document.getElementById("bar");
+            bar.style.borderTop = s.anatec_connected
+                ? "2px solid #ff6b00"
+                : "2px solid #888";
+
+        } catch (e) {
+            console.error("State fetch error:", e);
+        }
+    }
+
+    update();
+    setInterval(update, 3000);
+</script>
+
+</body>
+</html>

@@ -10,7 +10,7 @@ Usage:
 
 import threading
 import time
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, make_response
 from foys import FoysClient
 from state import match_state
 
@@ -47,6 +47,7 @@ seen_offense_ids = set()
 
 def poll():
     global seen_offense_ids
+    tick = 0
     while True:
         try:
             if match_state["selected"] and match_state["status"] != "Final":
@@ -56,7 +57,20 @@ def poll():
 
                 goals    = client.get_goals(match_id)
                 offenses = client.get_offenses(match_id)
+                timeouts = client.get_timeouts(match_id)
                 period   = current_period(goals, offenses)
+
+                # every ~9 seconds — check match status and current period
+                if tick % 3 == 0:
+                    try:
+                        matches = client.get_matches()
+                        current = next((m for m in matches if m["id"] == match_id), None)
+                        if current:
+                            match_state["status"] = current["status"]
+                            if current.get("period"):
+                                period = current["period"]
+                    except Exception:
+                        pass
 
                 match_state["home_score"] = calculate_score(goals, home_id)
                 match_state["away_score"] = calculate_score(goals, away_id)
@@ -69,6 +83,14 @@ def poll():
                     match_state["away_fouls"] = away_fouls
                     match_state["home_bonus"] = home_fouls >= 4
                     match_state["away_bonus"] = away_fouls >= 4
+                    match_state["home_timeouts"] = len([
+                        t for t in timeouts
+                        if t["isHomeTeam"] and t["periodId"] == period
+                    ])
+                    match_state["away_timeouts"] = len([
+                        t for t in timeouts
+                        if not t["isHomeTeam"] and t["periodId"] == period
+                    ])
 
                 # detect new player fouls for popup
                 new_fouls = [
@@ -89,6 +111,7 @@ def poll():
         except Exception as e:
             print(f"Poll error: {e}")
 
+        tick += 1
         time.sleep(3)
 
 
@@ -133,16 +156,47 @@ def api_state():
 
 @app.route("/overlay")
 def overlay():
-    return render_template("overlay.html")
+    response = make_response(render_template("overlay_foys.html"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+@app.route("/overlay/anatec")
+def overlay_anatec():
+    response = make_response(render_template("overlay_anatec.html"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+@app.route("/overlay/foys")
+def overlay_foys():
+    response = make_response(render_template("overlay_foys.html"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
 
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--anatec", choices=["serial", "simulate", "off"],
+                    default="simulate", help="Anatec reader mode")
+    ap.add_argument("--port", default="/dev/tty.usbserial-1110",
+                    help="Serial port for Anatec")
+    args = ap.parse_args()
+
     print("Authenticating with FOYS...")
     client.authenticate()
-    print("Starting background poller...")
+
+    print("Starting FOYS background poller...")
     t = threading.Thread(target=poll, daemon=True)
     t.start()
-    print("Server running at http://localhost:5000")
+
+    if args.anatec != "off":
+        from reader import start_reader
+        start_reader(mode=args.anatec, port=args.port)
+
+    print("Server running at http://localhost:5001")
     app.run(host="0.0.0.0", port=5001, debug=False)
