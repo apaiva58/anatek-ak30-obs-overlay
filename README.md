@@ -1,7 +1,15 @@
 # anatec-ak30-obs-overlay
 
-A Python bridge between the Anatec AK30 scoreboard controller and OBS Studio,
-enabling live scoreboard overlays for basketball livestreams without manual score input.
+## Purpose
+
+Almere Pioneers Basketball streams and records live games through OBS Studio.
+This project provides an automatic scoreboard overlay for those streams —
+so the score, clock, fouls and timeouts appear on screen without anyone
+manually updating them during the game.
+
+The scoreboard operator works the Anatec AK30 controller as normal.
+The DWF tablet operator enters the game data as normal.
+The overlay updates itself.
 
 Developed by dr. Antonio Paiva Aranda for Almere Pioneers Basketball (Almere, The Netherlands).
 
