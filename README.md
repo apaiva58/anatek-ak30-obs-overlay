@@ -19,8 +19,8 @@ Developed by dr. Antonio Paiva Aranda for Almere Pioneers Basketball (Almere, Th
 
 Reads live scoreboard data from two sources:
 
-- **Anatec AK30 serial feed** — score, clock, period, fouls, timeouts direct from the controller via USB
-- **FOYS DWF API** — live match data from the NBB Digitaal Wedstrijd Formulier system, including player names, fouls per player, and match roster
+- Anatec AK30 serial feed — score, clock, period, fouls, timeouts direct from the controller via USB
+- FOYS DWF API — live match data from the NBB Digitaal Wedstrijd Formulier system, including player names, fouls per player, and match roster
 
 Serves both data sources as a web overlay for OBS Studio Browser Source.
 One person operates the scoreboard as normal — the overlay updates automatically.
@@ -45,8 +45,8 @@ One person operates the scoreboard as normal — the overlay updates automatical
 | Milestone | Status |
 |---|---|
 | 1. Protocol discovery | done |
-| 2. Serial reader + parser | done |
-| 3. Flask server + OBS overlay | done |
+| 2. Serial reader and parser | done |
+| 3. Flask server and OBS overlay | done |
 | 4. FOYS DWF API integration | done |
 | 5. Final stats overlay | done |
 | 6. Second capture session (multi-digit scores) | planned |
@@ -112,10 +112,13 @@ Install dependencies:
     # 6. Run without Anatec (FOYS only)
     python3 scoreboard/server.py --anatec off
 
-    # 7. Open match selection in browser
+    # 7. Use demo environment
+    python3 scoreboard/server.py --anatec off --demo
+
+    # 8. Open match selection in browser
     http://localhost:5001
 
-    # 8. Add overlay as OBS Browser Source
+    # 9. Add overlay as OBS Browser Source
     http://localhost:5001/overlay
 
 ---
@@ -131,11 +134,11 @@ Install dependencies:
     │   ├── reader.py               Anatec serial reader
     │   ├── parser.py               Anatec frame parser
     │   ├── simulator.py            game simulator for testing
-    │   ├── server.py               Flask server + API endpoints
+    │   ├── server.py               Flask server and API endpoints
     │   └── state.py                shared in-memory match state
     ├── templates/
     │   ├── select.html             match selection UI
-    │   ├── overlay.html            combined live + final overlay (OBS)
+    │   ├── overlay.html            combined live and final overlay for OBS
     │   ├── overlay_foys.html       FOYS-only overlay
     │   └── overlay_anatec.html     Anatec-only overlay
     └── docs/
@@ -160,13 +163,13 @@ via a capture session at the hall. See docs/protocol.md for the full frame forma
 
 ### FOYS DWF API
 
-The NBB uses FOYS as its match management system. The DWF (Digitaal Wedstrijd
-Formulier) tablet app sends live match events to api.foys.io. This project
-polls three endpoints every 3 seconds:
+The NBB uses FOYS as its match management system. The DWF tablet app sends
+live match events to api.foys.io. This project polls three endpoints every
+3 seconds:
 
-- /matches/{id}/goals       score calculation
-- /matches/{id}/offenses    team fouls and player fouls
-- /matches/{id}/timeouts    timeout count per team per period
+    /matches/{id}/goals       score calculation
+    /matches/{id}/offenses    team fouls and player fouls
+    /matches/{id}/timeouts    timeout count per team per period
 
 See docs/foys-api.md for the full API reference.
 
@@ -181,11 +184,22 @@ to a final stats table.
 
 ## Credentials
 
-FOYS API requires authentication. Create a .env file (never commit to git):
+FOYS API requires authentication using credentials issued by NBB at club level.
+Not every club member has DWF access — credentials are managed by the club
+administrator via the NBB backend.
+
+It is recommended to create a dedicated streaming account separate from the
+main DWF operator account. This allows the streaming credential to be managed
+independently and makes troubleshooting easier. Contact your NBB club
+administrator to request a dedicated account.
+
+Create a .env file — never commit to git:
 
     FOYS_USERNAME=...
     FOYS_PASSWORD=...
     FOYS_ORGANISATION_ID=...
+    FOYS_ORGANISATION_ID_DEMO=...
+    FOYS_DEMO_MODE=false
 
 ---
 
@@ -206,7 +220,6 @@ MIT License — free to use, modify and distribute.
 ---
 
 ## Club
-
 
 Almere Pioneers Basketball
 Almere, The Netherlands
