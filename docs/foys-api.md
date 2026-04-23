@@ -1,314 +1,277 @@
-# FOYS DWF API
+# FOYS DWF API — Overlay Integration
 
-Initially discovered by reverse engineering the NBB Digitaal Wedstrijd Formulier
-web app at https://dwf.basketball.nl
-
-An official developer portal is available at https://developers.foys.tech
-Contact: developers@foys.tech
-
-Demo match: https://dwf.basketball.nl/matches/487998/progress
+This document describes how the FOYS DWF API is used in the
+Almere Pioneers scoreboard overlay stack.
 
 ---
 
-## Official Developer Portal
+## Architecture
 
-FOYS provides official API documentation at https://developers.foys.tech
+```
+DWF tablet (scorer's table)
+        down - operator input
+api.foys.io (NBB server)
+        down - REST API polled every 3 seconds
+scoreboard/server.py (Flask)
+        down - /api/state + /api/players
+overlay.html (OBS Browser Source)
+```
 
-The portal documents:
-- Authentication (JWT, access token, refresh token)
-- All available modules and base URLs
-- Rate limiting guidelines
-- Error codes
+---
 
-The Sport Competition module used in this project corresponds to the
-/competition path documented in the portal.
+## Data Priority — Combined Anatec + FOYS Input
 
-For a dedicated read-only streaming token — independent of the club DWF
-operator credentials — contact developers@foys.tech.
+When both Anatec serial and FOYS API are active, each data source
+has a defined priority for each field.
+
+### Anatec is leading
+
+  Score        Anatec updates instantly when the operator presses
+               the button. FOYS score has human latency (DWF operator
+               must enter the goal). For a live stream the displayed
+               score must match the physical scoreboard in real time.
+
+  Clock        Only available from Anatec. FOYS does not transmit
+               the game clock.
+
+  Period       Physical scoreboard is authoritative.
+
+  Timeouts     Physical scoreboard is authoritative.
+
+### FOYS is leading
+
+  Fouls        FOYS captures individual player fouls with names,
+               jersey numbers and foul codes. Richer than Anatec
+               team foul count.
+
+  Club logos   Available from FOYS match object only.
+
+  Match info   Date, location, court - from FOYS match object.
+
+  Player stats Calculated from FOYS goals and offenses during the
+               game. Running in the background, displayed at Final.
+
+### FOYS score role
+
+  The FOYS score is the official NBB record - entered by the
+  certified DWF operator. It is used for player stats calculation
+  and shown in the final stats table. It is not used for the live
+  score display when Anatec is connected.
+
+### Fallback
+
+  When Anatec is not connected, the overlay falls back to FOYS
+  score for the live display. This covers FOYS-only deployments.
+
+  In overlay.html:
+
+    const homeScore = s.anatec_connected
+        ? s.anatec_home_score
+        : s.home_score;
 
 ---
 
 ## Authentication
 
-The DWF endpoint uses a legacy form-encoded token request:
+The server authenticates once at startup using OAuth2 password grant.
+Credentials are stored in .env (never committed to git).
 
 ```
 POST https://api.foys.io/foys/api/v1/token
-Content-Type: application/x-www-form-urlencoded
-
 grant_type=password
 username=...
 password=...
 organisationId=...
 ```
 
-The official v2 endpoint uses JSON:
+Returns a JWT token used as Bearer header on all subsequent calls.
+Token is automatically refreshed on 401 response.
 
-```
-POST https://api.foys.io/foys/pub/v2/token
-Content-Type: application/json
-
-{
-  "username": "...",
-  "password": "...",
-  "club_guid": "..."
-}
-```
-
-Both return a JWT access token. Use as Bearer header on all subsequent requests.
-
-Access token valid for 1 hour. A refresh token (valid 30 days) is provided
-by the v2 endpoint — use it to obtain a new access token without re-authenticating.
-
-Do not request a new token for every API call. Cache the token and reuse it.
-Re-authenticate only on 401 response.
-
-JWT is stateless — multiple simultaneous clients using the same credentials
-are supported. The DWF tablet operator is unaffected by additional read-only clients.
-
-API requires authentication. Public access not available.
-401 returned without a valid Bearer token (confirmed April 2026).
-
-NEVER commit credentials to the repository. Store in a .env file.
+See: scoreboard/foys.py - FoysClient.authenticate()
 
 ---
 
-## Base URL
+## Match Selection
+
+On startup the server fetches all matches for the account:
 
 ```
-https://api.foys.io/competition/dmf-api/v1
+GET /competition/dmf-api/v1/matches
 ```
 
-All endpoints below are relative to this base URL.
+Returns an array of matches - past, live and upcoming.
+The volunteer selects the correct match via the web UI at /.
+
+Key fields used:
+- id                          matchId for subsequent calls
+- status                      Planned, InProgress, Final
+- homeTeamName / awayTeamName
+- homeTeamOrganisationName / awayTeamOrganisationName
+- homeTeamOrganisationUrl / awayTeamOrganisationUrl
+- homeTeamId / awayTeamId
+- homeScore / awayScore
+- date / startTime / accommodationName / fieldName
+
+See: scoreboard/server.py - select_match()
 
 ---
 
-## Endpoints
+## Live Polling (every 3 seconds)
 
-### All matches for account
-
-```
-GET /matches
-```
-
-Returns an array of all matches assigned to the authenticated DWF
-account — completed, live and upcoming.
-
-Match status values:
-
-  Planned      not yet started
-  InProgress   live (not confirmed in demo environment)
-  Final        completed
-
-Key fields per match object:
-
-  id                              matchId for subsequent calls
-  status
-  homeTeamId / awayTeamId
-  homeTeamName / awayTeamName
-  homeTeamOrganisationName        club name
-  homeTeamOrganisationUrl         club logo URL
-  homeScore / awayScore           pre-calculated running totals
-  period                          current period ID (null when not started)
-  matchDisciplinaryStatus         null or reason if match stopped
-  homeTeamMatchPlayers / awayTeamMatchPlayers
-    teamNumber                    jersey number
-    isCaptain
-    isSubstitute / isSubstitutePlayed
-    matchRole.type                Player or Coach
-    totalPoints                   running scorer total
-    presentStatus                 Present or NotChecked
-
-Note: homeScore and awayScore in the match object are pre-calculated
-but the match object is not polled live by the DWF app. During live
-play, score must be calculated from the /goals endpoint.
-
----
+Three endpoints are polled continuously during the game.
 
 ### Goals
 
 ```
-GET /matches/{matchId}/goals
+GET /competition/dmf-api/v1/matches/{matchId}/goals
 ```
 
-Returns an array of all scoring events for the match.
+Returns array of all scoring events. Score is calculated client-side:
 
-Key fields:
+```python
+home_score = sum(g["points"] for g in goals if g["teamId"] == home_id)
+```
 
-  teamId          which team scored
-  points          0, 1, 2 or 3
-  penalty         true = free throw, false = field goal
-  periodId        period in which the score occurred
-  matchPlayerId   player who scored
-  matchLogId      chronological sequence number
-
-Scoring reference:
-
-  points=2, penalty=false   2-point field goal
-  points=3, penalty=false   3-point field goal
-  points=1, penalty=true    free throw made
-  points=0, penalty=true    free throw missed (no score change)
-
-Score calculation:
-
-  home_score = sum(g["points"] for g in goals if g["teamId"] == home_id)
-  away_score = sum(g["points"] for g in goals if g["teamId"] == away_id)
-
----
+Fields used:
+- teamId          which team scored
+- points          0, 1, 2 or 3
+- penalty         true = free throw
+- periodId        which quarter
+- matchPlayerId   for player stats
 
 ### Offenses
 
 ```
-GET /matches/{matchId}/offenses
+GET /competition/dmf-api/v1/matches/{matchId}/offenses
 ```
 
-Returns a paginated object:
+Returns {"totalCount": N, "items": [...]} - extract items array.
 
-  {"totalCount": N, "items": [...]}
+Used for team foul count per period and player foul count.
+Only fouls where matchPlayer.matchRole.type == "Player" count
+towards team fouls. Coach and bench technicals (TC, TB) excluded.
 
-Extract the items array. Returns all fouls registered in the match.
+Fields used:
+- matchPlayer.teamId
+- matchPlayer.matchRole.type    Player or Coach
+- offenseType.code              P1, P2, P3, T, TC, TB, U, D, F
+- periodId
+- matchPlayerId                 for player stats
 
-Key fields:
-
-  matchPlayer.teamId
-  matchPlayer.matchRole.type    Player or Coach
-  offenseType.code
-  offenseType.group
-  periodId
-  matchPlayerId
-  matchLogId
-
-Offense type reference:
-
-  code  group  name                              counts as team foul
-  P0    P      Diskwalificerende persoonlijke    yes
-  P1    P      Persoonlijke fout 1               yes
-  P2    P      Persoonlijke fout 2               yes
-  P3    P      Persoonlijke fout 3               yes
-  T     TF     Technische fout speler            yes
-  TC    TF     Technische fout coach             NO
-  TB    TF     Technische fout bank              NO
-  U     SF     Onsportief gedrag                 yes
-  D     SF     Diskwalificatie                   yes
-  F     SF     Vechten                           yes
-
-Team foul count — only fouls where matchRole.type == "Player" count.
-Coach (TC) and bench (TB) technicals are excluded.
-
-  team_fouls = [
-      f for f in offenses
-      if f["matchPlayer"]["teamId"] == team_id
-      and f["periodId"] == current_period
-      and f["matchPlayer"]["matchRole"]["type"] == "Player"
-  ]
-  bonus = len(team_fouls) >= 4
-
----
+Offense codes reference: see docs/foys-api.md
 
 ### Timeouts
 
 ```
-GET /matches/{matchId}/timeouts
+GET /competition/dmf-api/v1/matches/{matchId}/timeouts
 ```
 
-Returns a paginated object:
+Returns {"totalCount": N, "items": [...]} - extract items array.
 
-  {"totalCount": N, "items": [...]}
-
-Extract the items array. Returns all timeouts taken in the match.
-
-Key fields:
-
-  isHomeTeam    true or false
-  periodId
-
-Note: the API records that a timeout occurred but does not indicate
-whether the timeout is currently active. Duration tracking must be
-handled client-side.
+Fields used:
+- isHomeTeam    true or false
+- periodId
 
 ---
 
-### Logs
+## Status Check (every 9 seconds)
 
 ```
-GET /matches/{matchId}/logs
+GET /competition/dmf-api/v1/matches
 ```
 
-Returns a chronological event log. Each entry has a sparse structure
-where most fields are null — only fields relevant to the event type
-are populated.
-
-Useful fields:
-
-  details         human-readable description (e.g. "Gewisseld naar 2e kwart")
-  periodPosition  new period ID on period change events
-  matchLogId      chronological sequence number
-
-Note: the DWF browser app polls this endpoint only occasionally,
-not continuously. Not suitable for high-frequency polling.
+Full match list re-fetched to detect status change to Final.
 
 ---
 
-## Period IDs
+## Player Stats Endpoint
 
-FOYS uses numeric period IDs consistent across all matches:
+```
+GET /api/players  (served by Flask, not FOYS)
+```
 
-  14   1e kwart
-  15   2e kwart
-  16   3e kwart
-  17   4e kwart
-  18   1e verlenging
-  19   2e verlenging
-  20   3e verlenging
-  21   4e verlenging
-  22   5e verlenging
+Combines:
+- Roster from last /matches call (name, jersey, captain)
+- Live stats calculated from goals and offenses:
+  - points    sum of goal points per player
+  - threes    count of 3-point goals per player
+  - fouls     count of player offenses
 
-Team fouls reset between quarters (resetTeamOffenses: true).
-Overtime periods do not reset team fouls (resetTeamOffenses: false).
+Player stats run in the background during the game and are
+displayed automatically when status becomes Final.
+
+---
+
+## Period Mapping
+
+FOYS uses numeric period IDs:
+
+  periodId 14   1e kwart
+  periodId 15   2e kwart
+  periodId 16   3e kwart
+  periodId 17   4e kwart
+  periodId 18+  Overtime
+
+---
+
+## Overlay Behaviour
+
+overlay.html polls /api/state every 3 seconds.
+
+During game (status != Final):
+- Score from Anatec when connected, FOYS as fallback
+- Clock from Anatec serial feed
+- Period from FOYS (updated on first event per quarter)
+- Team fouls from FOYS per period
+- Club logos from FOYS
+- Flashing timeout popup for 60 seconds on new timeout
+- Foul popup for 4 seconds on new player foul
+- Bonus indicator in red when team fouls >= 4 in current period
+
+On Final (status == Final):
+- Scorebar fades out
+- Final stats table fades in automatically
+- Shows FOYS official score
+- Player points, 3-pointers, fouls sorted by points
 
 ---
 
 ## Clock
 
-The game clock is not transmitted via the FOYS API. It runs
-client-side in the DWF browser app from a start timestamp.
-No WebSocket connection detected.
+The FOYS API does not transmit the game clock. No WebSocket
+connection detected in the DWF browser app. The clock runs
+client-side in JavaScript from a start timestamp.
 
-For live clock data an alternative source is required, such as
-the Anatec AK30 serial feed (see docs/protocol.md).
-
----
-
-## Rate Limiting
-
-The official portal recommends:
-- Cache data on your side to avoid redundant requests
-- Implement exponential backoff on 429 and 5xx responses
-- Do not request a new token for every API call
+The overlay reads anatec_clock from /api/state which comes
+from the Anatec AK30 serial feed when connected.
+When Anatec is not connected, clock shows a dash.
 
 ---
 
-## Security
+## Known Limitations
 
-Credentials must never be committed to the repository.
-
-Store in a .env file:
-
-  FOYS_USERNAME=...
-  FOYS_PASSWORD=...
-  FOYS_ORGANISATION_ID=...
-
-Add .env to .gitignore.
+- Period update delayed until first goal or foul in new period
+- Scores above 99 not tested (Anatec protocol open question)
+- FOYS score latency expected - Anatec score used for live display
+- API requires authentication - returns 401 without token
+- FOYS server load on Saturday mornings may cause polling delays
 
 ---
 
-## Technical notes
+## Files
 
-- All API calls go to api.foys.io, not dwf.basketball.nl
-- CORS restricted to dwf.basketball.nl origin
-- Served via Cloudflare
-- Use demo-mode: true header in the demo environment only
-- matchId is visible in the DWF URL: /matches/{matchId}/progress
-- InProgress status not confirmed in demo — verify with a live match
-- Official developer portal: https://developers.foys.tech
-- For a dedicated streaming token contact: developers@foys.tech
+  scoreboard/foys.py       FOYS API client - auth and fetch
+  scoreboard/server.py     Flask server - poll loop and routes
+  scoreboard/state.py      Shared in-memory match state
+  templates/overlay.html   Combined live and final overlay
+  templates/select.html    Match selection UI
+  .env                     Credentials (not in git)
+
+---
+
+## References
+
+- FOYS developer portal: https://developers.foys.tech
+- FOYS DWF demo: https://dwf.basketball.nl/matches/487998/progress
+- Raw API documentation: docs/foys-api.md
+- NBB Basketball Nederland: https://www.basketball.nl
