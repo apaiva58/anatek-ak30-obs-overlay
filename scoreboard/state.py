@@ -46,4 +46,6 @@ match_state = {
     "anatec_clock_running": False,
     "anatec_timeout":      None,
     "anatec_service_dot":  False,
+    "anatec_home_timeouts": 0,
+    "anatec_guest_timeouts": 0,
 }

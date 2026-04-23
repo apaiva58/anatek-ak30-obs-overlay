@@ -268,6 +268,7 @@ if __name__ == "__main__":
     t.start()
 
     if args.anatec != "off":
+        print(f"Starting Anatec reader in {args.anatec} mode...")
         from reader import start_reader
         start_reader(mode=args.anatec, port=args.port)
 

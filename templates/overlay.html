@@ -13,8 +13,6 @@
             overflow: hidden;
         }
 
-        /* ── LIVE SCOREBAR ───────────────────────────────────────── */
-
         #bar {
             position: absolute;
             bottom: 0;
@@ -137,8 +135,6 @@
             flex-shrink: 0;
         }
 
-        /* ── POPUPS ──────────────────────────────────────────────── */
-
         #timeout-popup, #foul-popup {
             position: absolute;
             bottom: 88px;
@@ -180,8 +176,6 @@
             50%  { opacity: 0.3; }
             100% { opacity: 1; }
         }
-
-        /* ── FINAL STATS ─────────────────────────────────────────── */
 
         #final {
             position: absolute;
@@ -258,7 +252,6 @@
         }
 
         .tables { display: flex; gap: 32px; }
-
         .team-table { flex: 1; }
 
         .table-header {
@@ -286,31 +279,18 @@
         }
 
         thead th.num { text-align: right; }
-
         tbody tr { border-top: 1px solid #1a1a2e; }
-
         td { padding: 4px 6px; color: #cccccc; }
-
         td.jersey { color: #888; width: 32px; font-size: 0.75rem; }
-
         td.name { color: #ffffff; font-weight: 500; }
-
-        td.name.captain::after {
-            content: " ©";
-            color: #ff6b00;
-            font-size: 0.7rem;
-        }
-
+        td.name.captain::after { content: " ©"; color: #ff6b00; font-size: 0.7rem; }
         td.num { text-align: right; font-variant-numeric: tabular-nums; width: 40px; }
-
         td.points { color: #ffffff; font-weight: 700; }
-
         td.fouls.warning { color: #ff6b00; font-weight: 600; }
     </style>
 </head>
 <body>
 
-<!-- Live scorebar -->
 <div id="bar">
     <div class="pioneer-accent"></div>
 
@@ -346,11 +326,9 @@
     </div>
 </div>
 
-<!-- Popups -->
 <div id="timeout-popup"></div>
 <div id="foul-popup"></div>
 
-<!-- Final stats -->
 <div id="final">
     <div class="final-header">
         <div style="display:flex; align-items:center;">
@@ -383,8 +361,7 @@
             <table>
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Speler</th>
+                        <th>#</th><th>Speler</th>
                         <th class="num">Pts</th>
                         <th class="num">3pt</th>
                         <th class="num">Ftn</th>
@@ -398,8 +375,7 @@
             <table>
                 <thead>
                     <tr>
-                        <th>#</th>
-                        <th>Speler</th>
+                        <th>#</th><th>Speler</th>
                         <th class="num">Pts</th>
                         <th class="num">3pt</th>
                         <th class="num">Ftn</th>
@@ -469,12 +445,10 @@
 
             const isFinal = s.status === "Final";
 
-            // switch between bar and final
             document.getElementById("bar").classList.toggle("hidden", isFinal);
             document.getElementById("final").classList.toggle("visible", isFinal);
 
             if (isFinal) {
-                // final stats
                 const playersRes = await fetch("/api/players");
                 const players = await playersRes.json();
 
@@ -496,31 +470,56 @@
                 document.getElementById("away-club").textContent   = s.away_club || "";
                 document.getElementById("home-name").textContent   = s.home_name || "—";
                 document.getElementById("away-name").textContent   = s.away_name || "—";
-                document.getElementById("home-score").textContent  = s.home_score ?? 0;
-                document.getElementById("away-score").textContent  = s.away_score ?? 0;
-                document.getElementById("period").textContent      = periodLabel(s.period);
 
+                // SCORE — Anatec when connected, FOYS as fallback
+                const homeScore = s.anatec_connected ? s.anatec_home_score : s.home_score;
+                const awayScore = s.anatec_connected ? s.anatec_guest_score : s.away_score;
+                document.getElementById("home-score").textContent  = homeScore ?? 0;
+                document.getElementById("away-score").textContent  = awayScore ?? 0;
+
+                 // PERIOD — Anatec when connected, FOYS as fallback
+                const period = s.anatec_connected ? s.anatec_period : s.period;
+                document.getElementById("period").textContent = s.status === "Final" ? "FINAL" :
+                s.anatec_connected ? (period || "—") : periodLabel(period);
+
+                // CLOCK — always Anatec
                 const clockEl = document.getElementById("clock");
                 clockEl.textContent  = s.anatec_clock ?? "—";
                 clockEl.className    = "clock-value" + (s.anatec_clock_running ? "" : " stopped");
 
+                // FOULS — Anatec when connected, FOYS as fallback
+                const homeFouls = s.anatec_connected ? s.anatec_home_fouls : s.home_fouls;
+                const awayFouls = s.anatec_connected ? s.anatec_guest_fouls : s.away_fouls;
+                const homeBonus = homeFouls >= 4;
+                const awayBonus = awayFouls >= 4;
+
                 const hf = document.getElementById("home-fouls");
-                hf.textContent = `fouten: ${s.home_fouls}`;
-                hf.className   = "team-fouls" + (s.home_bonus ? " bonus" : "");
+                hf.textContent = `fouten: ${homeFouls}`;
+                hf.className   = "team-fouls" + (homeBonus ? " bonus" : "");
 
                 const af = document.getElementById("away-fouls");
-                af.textContent = `fouten: ${s.away_fouls}`;
-                af.className   = "team-fouls" + (s.away_bonus ? " bonus" : "");
+                af.textContent = `fouten: ${awayFouls}`;
+                af.className   = "team-fouls" + (awayBonus ? " bonus" : "");
 
-                // timeouts
-                const ht = s.home_timeouts ?? 0;
-                const at = s.away_timeouts ?? 0;
-                if (ht > lastHomeTimeouts) startTimeoutFlash("home");
-                if (at > lastAwayTimeouts) startTimeoutFlash("away");
-                lastHomeTimeouts = ht;
-                lastAwayTimeouts = at;
+                // TIMEOUTS — Anatec flag when connected, FOYS count as fallback
+                if (s.anatec_connected) {
+                    const toPopup = document.getElementById("timeout-popup");
+                    if (s.anatec_timeout) {
+                        startTimeoutFlash(s.anatec_timeout);
+                    } else {
+                        toPopup.classList.remove("visible");
+                        clearTimeout(timeoutTimer);
+                    }
+                } else {
+                    const ht = s.home_timeouts ?? 0;
+                    const at = s.away_timeouts ?? 0;
+                    if (ht > lastHomeTimeouts) startTimeoutFlash("home");
+                    if (at > lastAwayTimeouts) startTimeoutFlash("away");
+                    lastHomeTimeouts = ht;
+                    lastAwayTimeouts = at;
+}
 
-                // logos
+                // LOGOS
                 const homeLogo = document.getElementById("home-logo");
                 if (s.home_logo) {
                     homeLogo.src = s.home_logo;
@@ -531,13 +530,14 @@
                     awayLogo.src = s.away_logo;
                     awayLogo.style.display = "block";
                 }
-                // foul popup
+
+                // FOUL POPUP — always FOYS
                 if (s.last_foul && JSON.stringify(s.last_foul) !== JSON.stringify(lastFoul)) {
                     lastFoul = s.last_foul;
                     showFoulPopup(s.last_foul);
                 }
 
-                // connection indicator
+                // CONNECTION INDICATOR
                 document.getElementById("bar").classList.toggle("connected", s.anatec_connected);
             }
 
