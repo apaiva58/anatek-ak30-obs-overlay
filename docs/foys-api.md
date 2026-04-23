@@ -1,13 +1,36 @@
 # FOYS DWF API
 
-Discovered by reverse engineering the NBB Digitaal Wedstrijd Formulier
+Initially discovered by reverse engineering the NBB Digitaal Wedstrijd Formulier
 web app at https://dwf.basketball.nl
+
+An official developer portal is available at https://developers.foys.tech
+Contact: developers@foys.tech
 
 Demo match: https://dwf.basketball.nl/matches/487998/progress
 
 ---
 
+## Official Developer Portal
+
+FOYS provides official API documentation at https://developers.foys.tech
+
+The portal documents:
+- Authentication (JWT, access token, refresh token)
+- All available modules and base URLs
+- Rate limiting guidelines
+- Error codes
+
+The Sport Competition module used in this project corresponds to the
+/competition path documented in the portal.
+
+For a dedicated read-only streaming token — independent of the club DWF
+operator credentials — contact developers@foys.tech.
+
+---
+
 ## Authentication
+
+The DWF endpoint uses a legacy form-encoded token request:
 
 ```
 POST https://api.foys.io/foys/api/v1/token
@@ -19,13 +42,29 @@ password=...
 organisationId=...
 ```
 
-Returns a JWT token. Use as Bearer header on all subsequent requests.
-Token expires and must be refreshed periodically. On 401 response,
-re-authenticate and retry.
+The official v2 endpoint uses JSON:
 
-JWT is stateless — multiple simultaneous clients using the same
-credentials are supported. The DWF tablet operator is unaffected
-by additional read-only clients.
+```
+POST https://api.foys.io/foys/pub/v2/token
+Content-Type: application/json
+
+{
+  "username": "...",
+  "password": "...",
+  "club_guid": "..."
+}
+```
+
+Both return a JWT access token. Use as Bearer header on all subsequent requests.
+
+Access token valid for 1 hour. A refresh token (valid 30 days) is provided
+by the v2 endpoint — use it to obtain a new access token without re-authenticating.
+
+Do not request a new token for every API call. Cache the token and reuse it.
+Re-authenticate only on 401 response.
+
+JWT is stateless — multiple simultaneous clients using the same credentials
+are supported. The DWF tablet operator is unaffected by additional read-only clients.
 
 API requires authentication. Public access not available.
 401 returned without a valid Bearer token (confirmed April 2026).
@@ -240,6 +279,15 @@ the Anatec AK30 serial feed (see docs/protocol.md).
 
 ---
 
+## Rate Limiting
+
+The official portal recommends:
+- Cache data on your side to avoid redundant requests
+- Implement exponential backoff on 429 and 5xx responses
+- Do not request a new token for every API call
+
+---
+
 ## Security
 
 Credentials must never be committed to the repository.
@@ -262,5 +310,5 @@ Add .env to .gitignore.
 - Use demo-mode: true header in the demo environment only
 - matchId is visible in the DWF URL: /matches/{matchId}/progress
 - InProgress status not confirmed in demo — verify with a live match
-- Consider contacting FOYS/NBB for a dedicated read-only API token
-  for club streaming and broadcast integrations
+- Official developer portal: https://developers.foys.tech
+- For a dedicated streaming token contact: developers@foys.tech
