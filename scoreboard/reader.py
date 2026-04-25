@@ -96,7 +96,7 @@ def _read_simulate():
             parsed = parse(frame)
             if parsed:
                 _update_state(parsed)
-                print(f"[SIM] {label} — {match_state['anatec_clock']}")
+                # print(f"[SIM] {label} — {match_state['anatec_clock']}")
             time.sleep(pause)
         # loop indefinitely
         time.sleep(2)

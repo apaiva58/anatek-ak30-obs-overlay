@@ -483,8 +483,7 @@
 
                  // PERIOD — Anatec when connected, FOYS as fallback
                 const period = s.anatec_connected ? s.anatec_period : s.period;
-                document.getElementById("period").textContent = s.status === "Final" ? "FINAL" :
-                s.anatec_connected ? (period || "—") : periodLabel(period);
+                document.getElementById("period").textContent = s.status === "Final" ? "FINAL" : periodLabel(period);
 
                 // CLOCK — always Anatec
                 const clockEl = document.getElementById("clock");

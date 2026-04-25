@@ -232,6 +232,46 @@ def game_sequence():
     # Buzzer
     yield state("Buzzer — service dot", clock_sec=0, clock_tenths=0,
                 service_dot=True, pause=2)
+    # Period 4 — tied game heading to overtime
+    yield state("Period 4", period=4, clock_min=2, clock_sec=0,
+                clock_tenths=None, home_fouls=0, away_fouls=0,
+                clock_running=False, home_score=9, guest_score=9, pause=1)
+    yield state("Clock starts P4", clock_running=True)
+    yield from clock_run(2, 0, 1, 55)
+    yield state("End of period 4 — tied", clock_running=False,
+                clock_min=0, clock_sec=0, pause=2)
+
+    # Period 5 — OT
+    yield state("OT starts", period=5, clock_min=2, clock_sec=0,
+                clock_tenths=None, home_fouls=0, away_fouls=0,
+                clock_running=False, pause=1)
+    yield state("Clock starts OT", clock_running=True)
+    yield from clock_run(2, 0, 1, 55)
+    yield state("Home scores OT (11:9)", home_score=11, clock_min=1, clock_sec=54, pause=0.08)
+    yield from clock_run(1, 54, 1, 50)
+    yield state("Guest scores OT (11:11)", guest_score=11, clock_min=1, clock_sec=49, pause=0.08)
+    yield from clock_run(1, 49, 1, 45)
+    yield state("End of OT — tied again", clock_running=False,
+                clock_min=0, clock_sec=0, pause=2)
+
+    # Period 6 — OT2, full clock to 0
+    yield state("OT2 starts", period=6, clock_min=2, clock_sec=0,
+                clock_tenths=None, home_fouls=0, away_fouls=0,
+                clock_running=False, pause=1)
+    yield state("Clock starts OT2", clock_running=True)
+    yield from clock_run(2, 0, 0, 1)
+
+    # Sub-second finish
+    for sec in range(4, 0, -1):
+        for tenth in range(9, -1, -1):
+            yield state(f"OT2 Clock 0:{sec:02d}.{tenth}",
+                       clock_sec=sec, clock_tenths=tenth,
+                       clock_running=False, pause=0.08)
+
+    yield state("OT2 Buzzer", clock_sec=0, clock_tenths=0,
+                service_dot=True, pause=2)
+    yield state("End of simulation", service_dot=False,
+                clock_running=False, pause=1)
     yield state("End of period", service_dot=False,
                 clock_running=False, pause=1)
 
