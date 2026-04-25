@@ -1,11 +1,12 @@
 # Anatec AK30 Serial Protocol
 
-Reverse-engineered from the Anatec AK30 controller via three capture
+Reverse-engineered from the Anatec AK30-IPF controller via four capture
 sessions at Almere Pioneers Basketball, Topsportcentrum Almere.
 
 Session 1: 2026-04-20
 Session 2: 2026-04-23
 Session 3: 2026-04-25 (clock positions corrected, timeout corrected)
+Session 4: 2026-04-25 (possession indicator confirmed at pos 7)
 
 ---
 
@@ -28,7 +29,7 @@ Run the capture tool:
 
 ## Frame Format
 
-  Length:    23 bytes (21 data bytes + CR terminator)
+  Length:    21 bytes
   Encoding:  ASCII
   Terminator: carriage return (0x0D)
   Content:   display buffer — the frame reflects exactly what is shown
@@ -91,6 +92,21 @@ There is no ambiguity with the period number (resolved session 2).
 Maximum period on Anatec AK30 is 5 (one overtime period).
 The controller does not support OT2 or beyond.
 
+### Possession Indicator
+
+  Pos  Field               Notes
+  ---  -----------------   -----------------------------------------
+  7    Possession          0x54 ('T') = home team (Thuis)
+                           0x47 ('G') = guest team (Gasten)
+                           0x20       = neutral / no possession
+
+Signals which team has possession or service — the jump ball arrow.
+Confirmed session 4 (2026-04-25) via serve home / serve away / serve out
+button sequence.
+
+NOTE: This was originally assumed to be a timeout flag. That was incorrect.
+Timeout is NOT signaled at pos 7.
+
 ### Clock (above 1 minute)
 
   Pos  Field               Notes
@@ -101,15 +117,14 @@ The controller does not support OT2 or beyond.
   13   Seconds units
 
 NOTE: pos 13 = units, pos 14 = tens. Confirmed session 3 (2026-04-25).
-Earlier documentation had these reversed — this is the correct order.
+Earlier documentation had these reversed.
 
 Running detection:
   There is no explicit clock running flag in the frame.
   Running is detected by comparing consecutive frames — if the clock
   value changes between frames, the clock is running.
   At 1:xx minutes pos 20 = 0x31 which is also the digit '1' —
-  there is no way to distinguish this from the running state in a
-  single frame.
+  there is no way to distinguish stopped from running in a single frame.
 
 Examples (all stopped):
 
@@ -133,8 +148,7 @@ When the clock drops below 1 minute the display switches to showing
 seconds and tenths of a second.
 
 Detection: pos 13 = 0x20 (space) signals tenths mode is active.
-NOTE: pos 13, not pos 14. Confirmed session 2 (2026-04-23) and
-verified against full sub-second capture session 3.
+NOTE: pos 13, not pos 14. Confirmed sessions 2 and 3.
 
   Pos  Field               Notes
   ---  -----------------   -----------------------------------------
@@ -159,12 +173,11 @@ Example (clock 0:04.7):
 
   Pos  Field               Notes
   ---  -----------------   -----------------------------------------
-  7    Always 0x20         NO timeout flag here — original assumption
-                           was incorrect (corrected session 3)
+  7    Possession indicator  NOT a timeout flag (see above)
   8    Guest timeouts taken  count increments when timeout taken
   9    Home timeouts taken   count increments when timeout taken
 
-Timeout detection (corrected session 3, 2026-04-25):
+Timeout detection (confirmed session 3, 2026-04-25):
   The Anatec does NOT transmit a timeout active flag at pos 7.
   Timeout is detected by combining two signals:
   1. Service dot (pos 15 = 0x07) activates
@@ -215,14 +228,14 @@ Activates during:
   - Away fouls:  0 (pos 4+5 = space+0)
   - Period:      1 (pos 6 = 1)
   - Clock:       0:00 stopped
-  - Timeout:     none (pos 7 = space, pos 8+9 = 0)
+  - Possession:  none (pos 7 = space)
 
 ---
 
 ## Annotated Example Frame
 
 Home score 11, guest score 6, home fouls 1, away fouls 3, period 1,
-clock 5:53 stopped:
+clock 5:53 stopped, no possession:
 
   Hex: 303020312033312030303620203535202031312035
 
@@ -235,6 +248,7 @@ clock 5:53 stopped:
   home_fouls  = space + 1 = 1          (pos 2+3)
   away_fouls  = space + 3 = 3          (pos 4+5)
   period      = 1                      (pos 6)
+  possession  = none                   (pos 7 = space)
   minutes     = 5                      (pos 20)
   seconds     = tens(5) + units(3) = 53  (pos 14+13)
   clock       = 5:53 stopped
@@ -271,6 +285,7 @@ Output saved to timestamped log file.
 - 0x07 (BEL) at pos 15 is reused as a display indicator — not a digit.
 - Positions 0+1 are always 0x30 — likely shot clock value, constant 00
   when no shot clock unit is connected.
+- Pos 7 is a possession indicator, not a timeout flag.
 - The AK30-IPF has personal foul panels — positions not yet documented
   as the panels were not connected during capture sessions.
 - Maximum period is 5 (OT). Anatec does not support multiple overtime periods.
