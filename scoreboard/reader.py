@@ -49,34 +49,40 @@ def _update_state(parsed: dict):
 
 
 def _read_serial(port: str, baud: int = 2400):
-    """Read frames from real serial port."""
+    """Read frames from real serial port with auto-reconnect."""
     try:
         import serial
     except ImportError:
         print("pyserial not installed — run: pip3 install pyserial --break-system-packages")
         return
 
-    print(f"Connecting to Anatec on {port} @ {baud} baud...")
-    try:
-        ser = serial.Serial(port, baud, timeout=2)
-        print(f"Connected.")
-        match_state["anatec_connected"] = True
-        buf = bytearray()
+    while True:
+        print(f"Connecting to Anatec on {port} @ {baud} baud...")
+        try:
+            ser = serial.Serial(port, baud, timeout=2)
+            print(f"Connected.")
+            match_state["anatec_connected"] = True
+            buf = bytearray()
 
-        while True:
-            data = ser.read(64)
-            if data:
-                buf.extend(data)
-                while len(buf) >= FRAME_LENGTH:
-                    frame = bytes(buf[:FRAME_LENGTH])
-                    buf = buf[FRAME_LENGTH:]
-                    parsed = parse(frame)
-                    if parsed:
-                        _update_state(parsed)
+            while True:
+                data = ser.read(64)
+                if data:
+                    buf.extend(data)
+                    while len(buf) >= FRAME_LENGTH:
+                        frame = bytes(buf[:FRAME_LENGTH])
+                        buf = buf[FRAME_LENGTH:]
+                        parsed = parse(frame)
+                        if parsed:
+                            _update_state(parsed)
 
-    except Exception as e:
-        print(f"Serial error: {e}")
-        match_state["anatec_connected"] = False
+        except Exception as e:
+            print(f"Serial error: {e} — retrying in 5 seconds")
+            match_state["anatec_connected"] = False
+            try:
+                ser.close()
+            except Exception:
+                pass
+            time.sleep(5)
 
 
 def _read_simulate():
