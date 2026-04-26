@@ -402,6 +402,7 @@
     let timeoutTimer = null;
     let lastHomeTimeouts = 0;
     let lastAwayTimeouts = 0;
+    let lastAnatecTimeout = null;
     let currentState = {};
 
     function periodLabel(id) {
@@ -526,11 +527,11 @@
                     "●".repeat(Math.min(awayTo, maxTO)) + "○".repeat(Math.max(0, maxTO - awayTo));
                 // TIMEOUTS — Anatec flag when connected, FOYS count as fallback
                 if (s.anatec_connected) {
-                    if (s.anatec_timeout && s.anatec_timeout !== currentState._lastAnatecTimeout) {
+                    if (s.anatec_timeout && s.anatec_timeout !== lastAnatecTimeout) {
                         startTimeoutFlash(s.anatec_timeout);
                     }
                     // don't clear on null — let the 60-second timer handle it
-                    currentState._lastAnatecTimeout = s.anatec_timeout;
+                    lastAnatecTimeout = s.anatec_timeout;
                     
                 }
                  else {
