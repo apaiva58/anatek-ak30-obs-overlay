@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: transparent;
+            font-family: 'Barlow', sans-serif;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+        }
+
+        /* ── LIVE SCOREBAR ───────────────────────────────────────── */
+
+        #bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 112px;
+            background: rgba(8, 12, 28, 0.94);
+            display: flex;
+            align-items: center;
+            padding: 0 48px;
+            gap: 0;
+            border-top: 3px solid #333;
+            transition: border-color 0.5s, opacity 0.6s;
+        }
+
+        #bar.connected { border-top-color: #ff6b00; }
+        #bar.hidden { opacity: 0; pointer-events: none; }
+
+        /* ── TEAM BLOCKS ── */
+
+.team {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .team.away {
+            flex-direction: row-reverse;
+            text-align: right;
+        }
+
+        .team-logo {
+            height: 72px;
+            width: 72px;
+            object-fit: contain;
+            flex-shrink: 0;
+            display: none;
+        }
+
+        .team-identity {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+
+        .team-club {
+            font-size: 0.72rem;
+            color: #cccccc;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .team-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            line-height: 1;
+        }
+
+        .team-secondary {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            border-left: 1px solid #333;
+            padding-left: 24px;
+        }
+
+        .away .team-secondary {
+            border-left: none;
+            border-right: 1px solid #333;
+            padding-left: 0;
+            padding-right: 24px;
+            align-items: flex-end;
+        }
+
+        .team-fouls {
+            font-size: 1.1rem;
+            color: #ffffff;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .team-fouls.bonus {
+            color: #ff2222;
+            font-weight: 700;
+        }
+
+        .timeout-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timeout-label {
+            font-size: 0.95rem;
+            color: #aaaaaa;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 500;
+        }
+
+        .timeout-dots {
+            font-size: 1.1rem;
+            color: #ffffff;
+            letter-spacing: 3px;
+        }
+
+        /* ── SCOREBOARD CENTER ── */
+
+        .scoreboard {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            flex-shrink: 0;
+            padding: 0 40px;
+        }
+
+        .score {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 4.8rem;
+            font-weight: 900;
+            color: #ffffff;
+            width: 120px;
+            text-align: center;
+            line-height: 1;
+            letter-spacing: -0.02em;
+        }
+
+        .score-divider {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 3rem;
+            color: #333;
+            font-weight: 300;
+            padding: 0 8px;
+        }
+
+        .center-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 32px;
+            border-left: 1px solid #222;
+            border-right: 1px solid #222;
+            margin: 0 24px;
+            gap: 2px;
+        }
+
+        .period-label {
+            font-size: 0.85rem;
+            color: #aaaaaa;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            font-weight: 600;
+        }
+
+        .period-value {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #ff6b00;
+            line-height: 1;
+        }
+
+        .clock-value {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 0.02em;
+            line-height: 1;
+        }
+
+        .clock-value.stopped { color: #aaaaaa; }
+
+        /* ── PIONEER ACCENT ── */
+
+        .pioneer-accent {
+            width: 4px;
+            height: 56px;
+            background: #ff6b00;
+            border-radius: 2px;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        /* ── POPUPS ── */
+
+        #timeout-popup, #foul-popup {
+            position: absolute;
+            bottom: 128px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 32px;
+            border-radius: 4px;
+            color: white;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        #timeout-popup {
+            background: rgba(8, 12, 28, 0.96);
+            border-left: 4px solid #ff2222;
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        #timeout-popup.visible {
+            opacity: 1;
+            animation: flash 0.8s infinite;
+        }
+
+        #foul-popup {
+            background: rgba(8, 12, 28, 0.96);
+            border-left: 4px solid #ff6b00;
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        #foul-popup.visible { opacity: 1; }
+
+        @keyframes flash {
+            0%   { opacity: 1; }
+            50%  { opacity: 0.25; }
+            100% { opacity: 1; }
+        }
+
+        /* ── FINAL STATS ── */
+
+        #final {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(8, 12, 28, 0.96);
+            padding: 24px 48px 28px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.6s;
+        }
+
+        #final.visible {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .final-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid #222;
+        }
+
+        .match-result {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+
+        .result-team { text-align: center; }
+
+        .result-club {
+            font-size: 0.65rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .result-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
+
+        .result-score {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 3.6rem;
+            font-weight: 900;
+            color: #ff6b00;
+            padding: 0 20px;
+            letter-spacing: -0.02em;
+        }
+
+        .result-label {
+            font-size: 0.65rem;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            text-align: center;
+        }
+
+        .final-badge {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: #ff6b00;
+            border: 1px solid #ff6b00;
+            padding: 4px 14px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+
+        .tables { display: flex; gap: 40px; }
+        .team-table { flex: 1; }
+
+        .table-header {
+            font-size: 0.7rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #1a1a2e;
+        }
+
+        .table-header span { color: #ff6b00; font-weight: 700; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+
+        thead th {
+            color: #555;
+            font-weight: 500;
+            text-align: left;
+            padding: 4px 8px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        thead th.num { text-align: right; }
+        tbody tr { border-top: 1px solid #111; }
+        td { padding: 5px 8px; color: #ccc; }
+        td.jersey { color: #666; width: 36px; font-size: 0.8rem; }
+        td.name { color: #fff; font-weight: 500; }
+        td.name.captain::after { content: " ©"; color: #ff6b00; font-size: 0.75rem; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; width: 44px; }
+        td.points { color: #fff; font-weight: 700; }
+        td.fouls.warning { color: #ff6b00; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<!-- Live scorebar -->
+<div id="bar">
+    <div class="pioneer-accent"></div>
+
+<!-- Home team -->
+    <div class="team home">
+        <img id="home-logo" class="team-logo" src="" alt="">
+        <div class="team-identity">
+            <div class="team-club" id="home-club"></div>
+            <div class="team-name" id="home-name">—</div>
+        </div>
+        <div class="team-secondary">
+            <div class="team-fouls" id="home-fouls">Fouls: 0</div>
+            <div class="timeout-line">
+                <span class="timeout-label">time-outs</span>
+                <span class="timeout-dots" id="home-timeout-dots">○○</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scoreboard center -->
+    <div class="scoreboard">
+        <div class="score" id="home-score">0</div>
+        <div class="score-divider">—</div>
+        <div class="center-wrap">
+            <div class="period-label">kwart</div>
+            <div class="period-value" id="period">—</div>
+            <div class="period-label" style="margin-top:2px">tijd</div>
+            <div class="clock-value" id="clock">—</div>
+        </div>
+        <div class="score-divider">—</div>
+        <div class="score" id="away-score">0</div>
+    </div>
+
+<!-- Away team -->
+    <div class="team away">
+        <img id="away-logo" class="team-logo" src="" alt="">
+        <div class="team-identity">
+            <div class="team-name" id="away-name">—</div>
+            <div class="team-club" id="away-club"></div>
+        </div>
+        <div class="team-secondary">
+            <div class="team-fouls" id="away-fouls">Fouls: 0</div>
+            <div class="timeout-line">
+                <span class="timeout-label">time-outs</span>
+                <span class="timeout-dots" id="away-timeout-dots">○○</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Popups -->
+<div id="timeout-popup"></div>
+<div id="foul-popup"></div>
+
+<!-- Final stats -->
+<div id="final">
+    <div class="final-header">
+        <div style="display:flex; align-items:center; gap:20px;">
+            <div class="pioneer-accent"></div>
+            <div class="match-result">
+                <div class="result-team">
+                    <div class="result-club" id="f-home-club"></div>
+                    <div class="result-name" id="f-home-name">—</div>
+                </div>
+                <div>
+                    <div class="result-label">eindstand</div>
+                    <div class="result-score">
+                        <span id="f-home-score">0</span>
+                        <span style="color:#222; font-weight:300"> — </span>
+                        <span id="f-away-score">0</span>
+                    </div>
+                </div>
+                <div class="result-team">
+                    <div class="result-club" id="f-away-club"></div>
+                    <div class="result-name" id="f-away-name">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="final-badge">Eindstand</div>
+    </div>
+
+    <div class="tables">
+        <div class="team-table">
+            <div class="table-header">Thuis — <span id="f-home-table-name"></span></div>
+            <table>
+                <thead><tr>
+                    <th>#</th><th>Speler</th>
+                    <th class="num">Pts</th><th class="num">3pt</th><th class="num">Ftn</th>
+                </tr></thead>
+                <tbody id="home-tbody"></tbody>
+            </table>
+        </div>
+        <div class="team-table">
+            <div class="table-header">Gasten — <span id="f-away-table-name"></span></div>
+            <table>
+                <thead><tr>
+                    <th>#</th><th>Speler</th>
+                    <th class="num">Pts</th><th class="num">3pt</th><th class="num">Ftn</th>
+                </tr></thead>
+                <tbody id="away-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    let lastFoul = null;
+    let popupTimeout = null;
+    let timeoutTimer = null;
+    let lastHomeTimeouts = 0;
+    let lastAwayTimeouts = 0;
+    let currentState = {};
+
+    function periodLabel(id) {
+        const map = { 14: "1", 15: "2", 16: "3", 17: "4" };
+        if (map[id]) return map[id];
+        if (id >= 18) return id === 18 ? "OT" : `OT${id - 17}`;
+        if (id >= 1 && id <= 4) return String(id);
+        if (id === 5) return "OT";
+        return "—";
+    }
+
+    function showFoulPopup(foul) {
+        const popup = document.getElementById("foul-popup");
+        popup.textContent = `Fout: ${foul.player} (#${foul.jersey}) — ${foul.code}`;
+        popup.classList.add("visible");
+        clearTimeout(popupTimeout);
+        popupTimeout = setTimeout(() => popup.classList.remove("visible"), 4000);
+    }
+
+    function startTimeoutFlash(team) {
+        const toPopup = document.getElementById("timeout-popup");
+        const name = team === "home"
+            ? (currentState.home_club || currentState.home_name || "THUIS")
+            : (currentState.away_club || currentState.away_name || "GASTEN");
+        toPopup.textContent = `TIME OUT — ${name.toUpperCase()}`;
+        toPopup.classList.add("visible");
+        clearTimeout(timeoutTimer);
+        timeoutTimer = setTimeout(() => toPopup.classList.remove("visible"), 60000);
+    }
+
+    function buildRows(players, tbodyId) {
+        const tbody = document.getElementById(tbodyId);
+        tbody.innerHTML = "";
+        players.sort((a, b) => b.points - a.points);
+        players.forEach(p => {
+            if (p.points === 0 && p.fouls === 0) return;
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="jersey">${p.jersey ?? "—"}</td>
+                <td class="name${p.captain ? " captain" : ""}">${p.name}</td>
+                <td class="num points">${p.points}</td>
+                <td class="num">${p.threes > 0 ? p.threes : "—"}</td>
+                <td class="num fouls${p.fouls >= 4 ? " warning" : ""}">${p.fouls > 0 ? p.fouls : "—"}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function update() {
+        try {
+            const res = await fetch("/api/state");
+            const s = await res.json();
+            currentState = s;
+
+            const isFinal = s.status === "Final";
+            document.getElementById("bar").classList.toggle("hidden", isFinal);
+            document.getElementById("final").classList.toggle("visible", isFinal);
+
+            if (isFinal) {
+                const playersRes = await fetch("/api/players");
+                const players = await playersRes.json();
+
+                document.getElementById("f-home-name").textContent  = s.home_name || "—";
+                document.getElementById("f-away-name").textContent  = s.away_name || "—";
+                document.getElementById("f-home-club").textContent  = s.home_club || "";
+                document.getElementById("f-away-club").textContent  = s.away_club || "";
+                document.getElementById("f-home-score").textContent = s.home_score ?? 0;
+                document.getElementById("f-away-score").textContent = s.away_score ?? 0;
+                document.getElementById("f-home-table-name").textContent = s.home_name || "";
+                document.getElementById("f-away-table-name").textContent = s.away_name || "";
+                buildRows(players.filter(p => p.team === "home"), "home-tbody");
+                buildRows(players.filter(p => p.team === "away"), "away-tbody");
+
+            } else {
+                // TEAM NAMES & CLUBS
+                document.getElementById("home-name").textContent = s.home_name || "—";
+                document.getElementById("away-name").textContent = s.away_name || "—";
+                document.getElementById("home-club").textContent = s.home_club || "";
+                document.getElementById("away-club").textContent = s.away_club || "";
+
+                // SCORE — Anatec when connected, FOYS as fallback
+                const homeScore = s.anatec_connected ? s.anatec_home_score : s.home_score;
+                const awayScore = s.anatec_connected ? s.anatec_guest_score : s.away_score;
+                document.getElementById("home-score").textContent = homeScore ?? 0;
+                document.getElementById("away-score").textContent = awayScore ?? 0;
+
+                // PERIOD
+                const period = s.anatec_connected ? s.anatec_period : s.period;
+                document.getElementById("period").textContent = periodLabel(period);
+
+                // CLOCK
+                const clockEl = document.getElementById("clock");
+                clockEl.textContent = s.anatec_clock ?? "—";
+                clockEl.className = "clock-value" + (s.anatec_clock_running ? "" : " stopped");
+
+                // FOULS
+                const homeFouls = s.anatec_connected ? s.anatec_home_fouls : s.home_fouls;
+                const awayFouls = s.anatec_connected ? s.anatec_guest_fouls : s.away_fouls;
+
+                const hf = document.getElementById("home-fouls");
+                hf.textContent = `fouten: ${homeFouls}`;
+                hf.className = "team-fouls" + (homeFouls >= 4 ? " bonus" : "");
+
+                const af = document.getElementById("away-fouls");
+                af.textContent = `fouten: ${awayFouls}`;
+                af.className = "team-fouls" + (awayFouls >= 4 ? " bonus" : "");
+
+                // TIMEOUT DOTS
+                const periodNum = s.anatec_connected ? s.anatec_period :
+                    ({14:1,15:2,16:3,17:4}[s.period] || s.period || 1);
+                const maxTO = periodNum <= 2 ? 2 : periodNum <= 4 ? 3 : 1;
+                const homeTo = s.anatec_connected ? s.anatec_home_timeouts : s.home_timeouts;
+                const awayTo = s.anatec_connected ? s.anatec_guest_timeouts : s.away_timeouts;
+                document.getElementById("home-timeout-dots").textContent =
+                    "●".repeat(Math.min(homeTo, maxTO)) + "○".repeat(Math.max(0, maxTO - homeTo));
+                document.getElementById("away-timeout-dots").textContent =
+                    "●".repeat(Math.min(awayTo, maxTO)) + "○".repeat(Math.max(0, maxTO - awayTo));
+
+                // TIMEOUT POPUP
+                if (s.anatec_connected) {
+                    if (s.anatec_timeout && s.anatec_timeout !== currentState._lastAnatecTimeout) {
+                        startTimeoutFlash(s.anatec_timeout);
+                    }
+                    currentState._lastAnatecTimeout = s.anatec_timeout;
+                } else {
+                    const ht = s.home_timeouts ?? 0;
+                    const at = s.away_timeouts ?? 0;
+                    if (ht > lastHomeTimeouts) startTimeoutFlash("home");
+                    if (at > lastAwayTimeouts) startTimeoutFlash("away");
+                    lastHomeTimeouts = ht;
+                    lastAwayTimeouts = at;
+                }
+
+                // LOGOS
+                const homeLogo = document.getElementById("home-logo");
+                if (s.home_logo) { homeLogo.src = s.home_logo; homeLogo.style.display = "block"; }
+                const awayLogo = document.getElementById("away-logo");
+                if (s.away_logo) { awayLogo.src = s.away_logo; awayLogo.style.display = "block"; }
+
+                // FOUL POPUP
+                if (s.last_foul && JSON.stringify(s.last_foul) !== JSON.stringify(lastFoul)) {
+                    lastFoul = s.last_foul;
+                    showFoulPopup(s.last_foul);
+                }
+
+                // CONNECTION INDICATOR
+                document.getElementById("bar").classList.toggle("connected", s.anatec_connected);
+            }
+
+        } catch (e) {
+            console.error("State fetch error:", e);
+        }
+    }
+
+    update();
+    setInterval(update, 1000);
+</script>
+
+</body>
+</html>

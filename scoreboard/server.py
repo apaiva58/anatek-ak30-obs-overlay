@@ -243,6 +243,13 @@ def overlay_final():
     response.headers["Pragma"] = "no-cache"
     return response
 
+@app.route("/overlay/wide")
+def overlay_wide():
+    response = make_response(render_template("overlay_wide.html"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
