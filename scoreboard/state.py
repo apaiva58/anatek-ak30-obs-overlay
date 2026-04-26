@@ -20,6 +20,8 @@ match_state = {
     "away_bonus":     False,
     "last_foul":      None,   # for popup: {player, jersey, code, team}
     "status":         "Planned",
+    "period_name":   "—",
+    "periods":       {},
     "home_timeouts": 0,
     "away_timeouts": 0,
     "home_club":  "",
