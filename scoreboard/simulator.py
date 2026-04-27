@@ -55,7 +55,7 @@ def make_frame(
     guest_timeouts=0,
     service_dot=False,
 ) -> bytes:
-    """Build a 21-byte Anatec data frame (without CR terminator) from game state."""
+    """Build a 21-byte Anatec frame from game state."""
 
     def a(n):
         """ASCII encode a single digit (0-9)."""
@@ -110,19 +110,18 @@ def make_frame(
         f[20] = a(d(clock_sec, 0))
     else:
         # normal mode
-        f[13] = a(clock_sec // 10)
-        f[14] = a(clock_sec % 10)
+        # pos 13 = seconds units, pos 14 = seconds tens (confirmed session 3)
+        f[13] = a(clock_sec % 10)
+        f[14] = a(clock_sec // 10)
         f[15] = 0x07 if service_dot else 0x20
         f[16] = a(d(home_score, 2)) if home_score >= 100 else 0x20
         f[17] = a(d(home_score, 1)) if home_score >= 10 else 0x20
         f[18] = a(d(home_score, 0))
 
-        if clock_running:
-            f[19] = a(clock_min)
-            f[20] = 0x31
-        else:
-            f[19] = a(clock_min // 10) if clock_min >= 10 else 0x20
-            f[20] = a(clock_min % 10)
+        # running detection is done by reader via consecutive frame comparison
+        # no explicit running flag — encode minutes as tens+units always
+        f[19] = a(clock_min // 10) if clock_min >= 10 else 0x20
+        f[20] = a(clock_min % 10)
 
     return bytes(f)
 
@@ -131,8 +130,9 @@ def game_sequence():
     """
     Yields (frame, label, pause_seconds) tuples simulating a 2-minute game sequence.
 
-    Score progression: 2-0, 2-2, 2-5, 4-5, 4-5 (foul away), 5-5, 5-8, 5-10, 7-10, 9-10
-    Full clock countdown with sub-second finish.
+    Score progression: 2-0, 2-2, 2-5, 4-5, foul away, 5-5, 5-8, 5-10, 7-10, 9-10
+    Clock runs continuously through scoring events — stops only on fouls,
+    timeouts and free throws, as in a real game.
     """
     s = dict(
         home_score=0, guest_score=0,
@@ -149,80 +149,72 @@ def game_sequence():
         return make_frame(**s), label, pause
 
     def clock_run(from_min, from_sec, to_min, to_sec, step_pause=0.08):
-        """Generate clock ticking frames from start to end time."""
-        frames = []
         total_from = from_min * 60 + from_sec
         total_to   = to_min * 60 + to_sec
         for total in range(total_from, total_to - 1, -1):
             m = total // 60
             sec = total % 60
-            frames.append(state(f"Clock {m}:{sec:02d}", pause=step_pause,
-                               clock_min=m, clock_sec=sec, clock_running=True))
-        return frames
+            yield state(f"Clock {m}:{sec:02d}", pause=step_pause,
+                        clock_min=m, clock_sec=sec, clock_tenths=None, clock_running=True)
 
     # Baseline
     yield state("Baseline", pause=1, clock_running=False, clock_min=2, clock_sec=0)
 
-    # Clock starts — count to 1:45
+    # Clock starts — 2:00 to 1:45, home scores 2 while clock runs
     yield state("Clock starts", clock_running=True)
-    yield from clock_run(2, 0, 1, 45)
+    yield from clock_run(2, 0, 1, 46)
+    yield state("Home +2 (2:0)", home_score=2, clock_min=1, clock_sec=45, pause=0.08)
+    yield from clock_run(1, 45, 1, 31)
 
-    # Home scores 2 — 2:0
-    yield state("Home +2 (2:0)", clock_running=False, home_score=2, pause=1.5)
+    # Guest scores 2 while clock runs — 2:2
+    yield state("Guest +2 (2:2)", guest_score=2, clock_min=1, clock_sec=30, pause=0.08)
+    yield from clock_run(1, 30, 1, 16)
+
+    # Guest scores 3 while clock runs — 2:5
+    yield state("Guest +3 (2:5)", guest_score=5, clock_min=1, clock_sec=15, pause=0.08)
+    yield from clock_run(1, 15, 1, 6)
+
+    # Home scores 2 while clock runs — 4:5
+    yield state("Home +2 (4:5)", home_score=4, clock_min=1, clock_sec=5, pause=0.08)
+    yield from clock_run(1, 5, 0, 56)
+
+    # Away foul — clock stops
+    yield state("Away foul (1)", clock_running=False,
+                clock_min=0, clock_sec=55, away_fouls=1, pause=1.5)
+
+    # Free throw — clock stopped
+    yield state("Home free throw (5:5)", home_score=5, pause=1.5)
+
+    # Clock resumes — 0:55 to 0:36
     yield state("Clock resumes", clock_running=True)
-    yield from clock_run(1, 45, 1, 30)
+    yield from clock_run(0, 55, 0, 36)
 
-    # Guest scores 2 — 2:2
-    yield state("Guest +2 (2:2)", clock_running=False, guest_score=2, pause=1.5)
-    yield state("Clock resumes", clock_running=True)
-    yield from clock_run(1, 30, 1, 15)
+    # Guest scores 3 while clock runs — 5:8
+    yield state("Guest +3 (5:8)", guest_score=8, clock_min=0, clock_sec=35, pause=0.08)
+    yield from clock_run(0, 35, 0, 26)
 
-    # Guest scores 3 — 2:5
-    yield state("Guest +3 (2:5)", clock_running=False, guest_score=5, pause=1.5)
-    yield state("Clock resumes", clock_running=True)
-    yield from clock_run(1, 15, 1, 5)
+    # Guest scores 2 while clock runs — 5:10
+    yield state("Guest +2 (5:10)", guest_score=10, clock_min=0, clock_sec=25, pause=0.08)
 
-    # Home scores 2 — 4:5
-    yield state("Home +2 (4:5)", clock_running=False, home_score=4, pause=1.5)
-    yield state("Clock resumes", clock_running=True)
-    yield from clock_run(1, 5, 0, 55)
-
-    # Away foul
-    yield state("Away foul (1)", clock_running=False, away_fouls=1, pause=1.5)
-    yield state("Clock resumes", clock_running=True)
-    yield from clock_run(0, 55, 0, 45)
-
-    # Home scores 1 (free throw) — 5:5
-    yield state("Home free throw (5:5)", clock_running=False, home_score=5, pause=1.5)
-    yield state("Clock resumes", clock_running=True)
-    yield from clock_run(0, 45, 0, 35)
-
-    # Guest scores 3 — 5:8
-    yield state("Guest +3 (5:8)", clock_running=False, guest_score=8, pause=1.5)
-    yield state("Clock resumes", clock_running=True)
-    yield from clock_run(0, 35, 0, 25)
-
-    # Guest scores 2 — 5:10
-    yield state("Guest +2 (5:10)", clock_running=False, guest_score=10, pause=1.5)
-
-    # Home timeout
+    # Home timeout — clock stops
     yield state("Home timeout", clock_running=False,
+                clock_min=0, clock_sec=25,
                 timeout_active="home", home_timeouts=1, pause=3)
     yield state("Timeout ends", timeout_active=None, pause=0.5)
 
+    # Clock resumes — 0:25 to 0:16
     yield state("Clock resumes", clock_running=True)
-    yield from clock_run(0, 25, 0, 15)
+    yield from clock_run(0, 25, 0, 16)
 
-    # Home scores 2 — 7:10
-    yield state("Home +2 (7:10)", clock_running=False, home_score=7, pause=1.5)
-    yield state("Clock resumes", clock_running=True)
-    yield from clock_run(0, 15, 0, 5)
+    # Home scores 2 while clock runs — 7:10
+    yield state("Home +2 (7:10)", home_score=7, clock_min=0, clock_sec=15, pause=0.08)
+    yield from clock_run(0, 15, 0, 6)
 
-    # Home scores 2 — 9:10
-    yield state("Home +2 (9:10)", clock_running=False, home_score=9, pause=1.5)
+    # Home scores 2 while clock runs — 9:10
+    yield state("Home +2 (9:10)", home_score=9, clock_min=0, clock_sec=5, pause=0.08)
+    yield from clock_run(0, 5, 0, 1)
 
     # Sub-second countdown
-    yield state("Clock resumes sub-second", clock_running=True)
     for sec in range(4, 0, -1):
         for tenth in range(9, -1, -1):
             yield state(f"Clock 0:{sec:02d}.{tenth}",
@@ -230,48 +222,8 @@ def game_sequence():
                        clock_running=False, pause=0.08)
 
     # Buzzer
-    yield state("Buzzer — service dot", clock_sec=0, clock_tenths=0,
+    yield state("Buzzer", clock_sec=0, clock_tenths=0,
                 service_dot=True, pause=2)
-    # Period 4 — tied game heading to overtime
-    yield state("Period 4", period=4, clock_min=2, clock_sec=0,
-                clock_tenths=None, home_fouls=0, away_fouls=0,
-                clock_running=False, home_score=9, guest_score=9, pause=1)
-    yield state("Clock starts P4", clock_running=True)
-    yield from clock_run(2, 0, 1, 55)
-    yield state("End of period 4 — tied", clock_running=False,
-                clock_min=0, clock_sec=0, pause=2)
-
-    # Period 5 — OT
-    yield state("OT starts", period=5, clock_min=2, clock_sec=0,
-                clock_tenths=None, home_fouls=0, away_fouls=0,
-                clock_running=False, pause=1)
-    yield state("Clock starts OT", clock_running=True)
-    yield from clock_run(2, 0, 1, 55)
-    yield state("Home scores OT (11:9)", home_score=11, clock_min=1, clock_sec=54, pause=0.08)
-    yield from clock_run(1, 54, 1, 50)
-    yield state("Guest scores OT (11:11)", guest_score=11, clock_min=1, clock_sec=49, pause=0.08)
-    yield from clock_run(1, 49, 1, 45)
-    yield state("End of OT — tied again", clock_running=False,
-                clock_min=0, clock_sec=0, pause=2)
-
-    # Period 6 — OT2, full clock to 0
-    yield state("OT2 starts", period=6, clock_min=2, clock_sec=0,
-                clock_tenths=None, home_fouls=0, away_fouls=0,
-                clock_running=False, pause=1)
-    yield state("Clock starts OT2", clock_running=True)
-    yield from clock_run(2, 0, 0, 1)
-
-    # Sub-second finish
-    for sec in range(4, 0, -1):
-        for tenth in range(9, -1, -1):
-            yield state(f"OT2 Clock 0:{sec:02d}.{tenth}",
-                       clock_sec=sec, clock_tenths=tenth,
-                       clock_running=False, pause=0.08)
-
-    yield state("OT2 Buzzer", clock_sec=0, clock_tenths=0,
-                service_dot=True, pause=2)
-    yield state("End of simulation", service_dot=False,
-                clock_running=False, pause=1)
     yield state("End of period", service_dot=False,
                 clock_running=False, pause=1)
 

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: transparent;
+            font-family: 'Barlow', sans-serif;
+            width: 1920px;
+            height: 1080px;
+            overflow: hidden;
+        }
+
+        #stats {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(8, 12, 28, 0.96);
+            padding: 48px 80px 56px;
+        }
+
+        .stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .pioneer-accent {
+            width: 4px;
+            height: 56px;
+            background: #ff6b00;
+            border-radius: 2px;
+            margin-right: 20px;
+            flex-shrink: 0;
+        }
+
+        .match-result {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+        }
+
+        .result-team { text-align: center; }
+
+        .result-club {
+            font-size: 1rem;
+            color: #aaaaaa;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        .result-name {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 2.4rem;
+            font-weight: 800;
+            color: #ffffff;
+            text-transform: uppercase;
+        }
+
+        .result-score {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 5rem;
+            font-weight: 900;
+            color: #ff6b00;
+            padding: 0 24px;
+            letter-spacing: -0.02em;
+        }
+
+        .result-label {
+            font-size: 0.9rem;
+            color: #aaaaaa;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            text-align: center;
+        }
+
+        .stats-badge {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        .period-badge {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            color: #ff6b00;
+            border: 1px solid #ff6b00;
+            padding: 8px 20px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+
+        .clock-badge {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #aaaaaa;
+            letter-spacing: 0.1em;
+        }
+
+        .tables { display: flex; gap: 60px; }
+        .team-table { flex: 1; }
+
+        .table-header {
+            font-size: 1.2rem;
+            color: #aaaaaa;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #333;
+        }
+
+        .table-header span { color: #ff6b00; font-weight: 700; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 1.2rem; }
+
+        thead th {
+            color: #aaaaaa;
+            font-weight: 600;
+            text-align: left;
+            padding: 6px 10px;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        thead th.num { text-align: right; }
+        tbody tr { border-top: 1px solid #1a1a2e; }
+        td { padding: 8px 10px; color: #ffffff; }
+        td.jersey { color: #aaaaaa; width: 48px; font-size: 1rem; }
+        td.name { color: #ffffff; font-weight: 500; }
+        td.name.captain::after { content: " ©"; color: #ff6b00; font-size: 0.85rem; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; width: 56px; }
+        td.points { color: #ffffff; font-weight: 700; }
+        td.fouls.warning { color: #ff6b00; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<div id="stats">
+    <div class="stats-header">
+        <div style="display:flex; align-items:center;">
+            <div class="pioneer-accent"></div>
+            <div class="match-result">
+                <div class="result-team">
+                    <div class="result-club" id="home-club"></div>
+                    <div class="result-name" id="home-name">—</div>
+                </div>
+                <div>
+                    <div class="result-label">stand</div>
+                    <div class="result-score">
+                        <span id="home-score">0</span>
+                        <span style="color:#333; font-weight:300"> — </span>
+                        <span id="away-score">0</span>
+                    </div>
+                </div>
+                <div class="result-team">
+                    <div class="result-club" id="away-club"></div>
+                    <div class="result-name" id="away-name">—</div>
+                </div>
+            </div>
+        </div>
+        <div class="stats-badge">
+            <div class="period-badge" id="period-badge">kwart —</div>
+            <div class="clock-badge" id="clock-badge">—</div>
+        </div>
+    </div>
+
+    <div class="tables">
+        <div class="team-table">
+            <div class="table-header">Thuis — <span id="home-table-name"></span></div>
+            <table>
+                <thead><tr>
+                    <th>#</th><th>Speler</th>
+                    <th class="num">Pts</th><th class="num">3pt</th><th class="num">Ftn</th>
+                </tr></thead>
+                <tbody id="home-tbody"></tbody>
+            </table>
+        </div>
+        <div class="team-table">
+            <div class="table-header">Gasten — <span id="away-table-name"></span></div>
+            <table>
+                <thead><tr>
+                    <th>#</th><th>Speler</th>
+                    <th class="num">Pts</th><th class="num">3pt</th><th class="num">Ftn</th>
+                </tr></thead>
+                <tbody id="away-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    function periodLabel(id) {
+        const map = { 14: "1", 15: "2", 16: "3", 17: "4" };
+        if (map[id]) return map[id];
+        if (id >= 18) return id === 18 ? "OT" : `OT${id - 17}`;
+        if (id >= 1 && id <= 4) return String(id);
+        if (id === 5) return "OT";
+        return "—";
+    }
+
+    function buildRows(players, tbodyId) {
+        const tbody = document.getElementById(tbodyId);
+        tbody.innerHTML = "";
+        players.sort((a, b) => b.points - a.points);
+        players.forEach(p => {
+            if (p.points === 0 && p.fouls === 0) return;
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td class="jersey">${p.jersey ?? "—"}</td>
+                <td class="name${p.captain ? " captain" : ""}">${p.name}</td>
+                <td class="num points">${p.points}</td>
+                <td class="num">${p.threes > 0 ? p.threes : "—"}</td>
+                <td class="num fouls${p.fouls >= 4 ? " warning" : ""}">${p.fouls > 0 ? p.fouls : "—"}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function update() {
+        try {
+            const res = await fetch("/api/state");
+            const s = await res.json();
+
+            // scores
+            const homeScore = s.anatec_connected ? s.anatec_home_score : s.home_score;
+            const awayScore = s.anatec_connected ? s.anatec_guest_score : s.away_score;
+            document.getElementById("home-score").textContent = homeScore ?? 0;
+            document.getElementById("away-score").textContent = awayScore ?? 0;
+
+            // team names
+            document.getElementById("home-name").textContent = s.home_name || "—";
+            document.getElementById("away-name").textContent = s.away_name || "—";
+            document.getElementById("home-club").textContent = s.home_club || "";
+            document.getElementById("away-club").textContent = s.away_club || "";
+            document.getElementById("home-table-name").textContent = s.home_name || "";
+            document.getElementById("away-table-name").textContent = s.away_name || "";
+
+            // period and clock
+            const period = s.anatec_connected ? s.anatec_period : s.period;
+            document.getElementById("period-badge").textContent = `kwart ${periodLabel(period)}`;
+            document.getElementById("clock-badge").textContent = s.anatec_clock ?? "—";
+
+            // players
+            const playersRes = await fetch("/api/players");
+            const players = await playersRes.json();
+            buildRows(players.filter(p => p.team === "home"), "home-tbody");
+            buildRows(players.filter(p => p.team === "away"), "away-tbody");
+
+        } catch (e) {
+            console.error("Stats fetch error:", e);
+        }
+    }
+
+    update();
+    setInterval(update, 3000);
+</script>
+
+</body>
+</html>

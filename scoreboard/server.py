@@ -260,6 +260,13 @@ def overlay_box():
     response.headers["Pragma"] = "no-cache"
     return response
 
+@app.route("/overlay/stats")
+def overlay_stats():
+    response = make_response(render_template("overlay_stats.html"))
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
