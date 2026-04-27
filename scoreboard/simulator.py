@@ -226,6 +226,9 @@ def game_sequence():
                 service_dot=True, pause=2)
     yield state("End of period", service_dot=False,
                 clock_running=False, pause=1)
+    # Hold at 0:00 for 30 seconds — gives OBS scene switcher time to detect
+    yield state("Hold 0:00", clock_sec=0, clock_tenths=0,
+                service_dot=False, clock_running=False, pause=30)
 
 
 def run():
