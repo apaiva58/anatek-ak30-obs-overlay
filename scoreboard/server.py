@@ -19,6 +19,58 @@ app = Flask(__name__, template_folder="../templates")
 client = FoysClient()
 
 
+# ── OBS WebSocket scene switcher ────────────────────────────────────────────
+
+def obs_switch_scene(scene_name):
+    """Switch OBS scene via WebSocket. Fails silently if OBS not connected."""
+    try:
+        import obsws_python as obs
+        cl = obs.ReqClient(host="localhost", port=4455, password="Alvaro09", timeout=3)
+        cl.set_current_program_scene(scene_name)
+        cl.disconnect()
+        print(f"[OBS] Switched to: {scene_name}")
+    except Exception as e:
+        print(f"[OBS] Scene switch failed: {e}")
+
+
+def obs_watcher():
+    """
+    Background thread — watches Anatec clock and switches OBS scenes.
+
+    Logic:
+    - End of period 1, 2 or 3 (clock hits 0:00) → switch to Scène 4: STATS
+    - Clock running again in new period           → switch back to Scène 2: WIDE Overlay
+    - End of period 4 or overtime (5)             → no automatic switch
+    """
+    last_period   = None
+    showing_stats = False
+
+    while True:
+        try:
+            minutes = match_state.get("anatec_clock_min", 1)
+            seconds = match_state.get("anatec_clock_sec", 1)
+            period  = match_state.get("anatec_period")
+            running = match_state.get("anatec_clock_running", False)
+
+            # End of period 1, 2 or 3 → switch to STATS
+            if (minutes == 0 and seconds == 0
+                    and period != last_period
+                    and period in [1, 2, 3]):
+                last_period   = period
+                showing_stats = True
+                obs_switch_scene("Scène 4: STATS")
+
+            # Clock running again in new period → switch back to WIDE
+            elif showing_stats and running and seconds > 0:
+                showing_stats = False
+                obs_switch_scene("Scène 2: WIDE Overlay")
+
+        except Exception as e:
+            print(f"[OBS watcher] {e}")
+
+        time.sleep(1)
+
+
 # ── Helper functions ────────────────────────────────────────────────────────
 
 def calculate_score(goals, team_id):
@@ -163,11 +215,11 @@ def select_match(match_id):
         "away_club":  match["awayTeamOrganisationName"],
         "last_foul":  None,
         "home_logo":        match["homeTeamOrganisationUrl"],
-    "away_logo":        match["awayTeamOrganisationUrl"],
-    "match_date":       match["date"][:10],
-    "match_time":       match["startTime"][:5],
-    "match_location":   match["accommodationName"],
-    "match_court":      match["fieldName"],
+        "away_logo":        match["awayTeamOrganisationUrl"],
+        "match_date":       match["date"][:10],
+        "match_time":       match["startTime"][:5],
+        "match_location":   match["accommodationName"],
+        "match_court":      match["fieldName"],
     })
     return render_template("select.html", matches=matches,
                            selected=match_id, message=f"Selected: {match['homeTeamName']} vs {match['awayTeamName']}")
@@ -182,20 +234,20 @@ def api_players():
     """Returns player roster with live stats for both teams."""
     if match_state.get("_mock_players"):
         return jsonify(match_state["_mock_players"])
-    
+
     if not match_state["selected"]:
         return jsonify([])
-    
+
     match_id = match_state["match_id"]
     try:
         matches = client.get_matches()
         match = next((m for m in matches if m["id"] == match_id), None)
         if not match:
             return jsonify([])
-        
+
         stats = match_state.get("player_stats", {})
         result = []
-        
+
         for team_key in ["homeTeamMatchPlayers", "awayTeamMatchPlayers"]:
             team = "home" if team_key == "homeTeamMatchPlayers" else "away"
             for p in match[team_key]:
@@ -212,7 +264,7 @@ def api_players():
                     "threes":  s["threes"],
                     "fouls":   s["fouls"],
                 })
-        
+
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -281,6 +333,7 @@ if __name__ == "__main__":
                     help="Use FOYS demo environment")
     ap.add_argument("--mock", action="store_true", help="Load mock data, skip FOYS auth")
     ap.add_argument("--finalised", action="store_true", help="Set mock status to Final")
+    ap.add_argument("--no-obs", action="store_true", help="Disable OBS scene switching")
     args = ap.parse_args()
 
     if args.mock:
@@ -303,6 +356,13 @@ if __name__ == "__main__":
         print(f"Starting Anatec reader in {args.anatec} mode...")
         from reader import start_reader
         start_reader(mode=args.anatec, port=args.port)
+
+    if not args.no_obs:
+        print("Starting OBS scene watcher...")
+        obs_thread = threading.Thread(target=obs_watcher, daemon=True)
+        obs_thread.start()
+    else:
+        print("OBS scene switching disabled (--no-obs)")
 
     print("Server running at http://localhost:5001")
     app.run(host="0.0.0.0", port=5001, debug=False)
