@@ -8,6 +8,7 @@ Session 2: 2026-04-23
 Session 3: 2026-04-25 (clock positions corrected, timeout corrected)
 Session 4: 2026-04-25 (possession indicator confirmed at pos 7)
 Session 5: 2026-04-26 (signal/buzzer button confirmed at pos 15)
+Session 6: 2026-04-29 (timeout count-up confirmed; possession blink during timeout)
 
 ---
 
@@ -108,6 +109,13 @@ button sequence.
 NOTE: This was originally assumed to be a timeout flag. That was incorrect.
 Timeout is NOT signaled at pos 7.
 
+Possession blinking during timeout (confirmed session 6, 2026-04-29):
+  During an active timeout count-up, pos 7 oscillates between its current
+  value and 0x20 (space) every ~6 frames. This causes the possession arrow
+  to blink on the physical scoreboard display. The overlay parser should
+  latch the last non-space value and hold it steady rather than reflecting
+  the raw oscillation.
+
 ### Timeouts
 
   Pos  Field               Notes
@@ -124,6 +132,22 @@ Timeout detection (confirmed session 3, 2026-04-25):
 
   Which team called the timeout is determined by which count increased.
   When the buzzer goes off (pos 15 = 0x20), the timeout has ended.
+
+Timeout clock behaviour (confirmed session 6, 2026-04-29):
+  The controller DRIVES the timeout clock — it streams the countdown
+  continuously in the clock positions (pos 13/14/19/20).
+  The timeout sequence is: 30 seconds count DOWN, then 60 seconds count UP.
+  Total duration: 90 seconds.
+  The overlay must implement its own 30↓/60↑ timer when a timeout is
+  detected, or read the clock positions directly from the stream.
+
+  Example — home timeout called, clock was at 4:48, frame at count-up:
+    pos 9  = 0x31 (1 — home timeout count incremented)
+    pos 14 = 0x32 (2 — seconds tens)
+    pos 13 = 0x20 (space — tenths mode, below 1 minute)
+    pos 19 = 0x34 (4)
+    pos 20 = 0x38 (8)
+    clock  = 0:48 (timeout counting up)
 
 Timeout counts per half (NBB basketball):
   Q1+Q2 (first half):   max 2 per team
